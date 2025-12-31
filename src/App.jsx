@@ -2,9 +2,11 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Navbar from './components/layout/Navbar';
+import MobileNavbar from './components/layout/MobileNavbar'; // スマホ用メニューのインポート
+
 import Dashboard from './pages/Dashboard';
 import PortfolioPage from './pages/PortfolioPage';
-import AssetPage from './pages/AssetPage'; // 新規追加
+import AssetPage from './pages/AssetPage';
 import LoansPage from './pages/LoansPage';
 import CashFlowPage from './pages/CashFlowPage';
 import LifePlanPage from './pages/LifePlanPage';
@@ -23,80 +25,91 @@ function PrivateRoute({ children }) {
 function AppContent() {
   return (
     <>
+      {/* PC/タブレット用の上部ナビゲーション */}
       <Navbar />
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
 
-        {/* ダッシュボード */}
-        <Route path="/" element={
-          <PrivateRoute>
-            <Dashboard />
-          </PrivateRoute>
-        } />
+      {/* メインコンテンツエリア 
+        pb-24 (padding-bottom: 6rem) : スマホで下部メニューに隠れないよう余白を確保
+        md:pb-0 : PCサイズ(md以上)では下部メニューがないので余白をゼロにする
+      */}
+      <div className="pb-24 md:pb-0 min-h-screen bg-gray-50">
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
 
-        {/* 既存のポートフォリオページ（もし不要なら削除可） */}
-        <Route path="/portfolio" element={
-          <PrivateRoute>
-            <PortfolioPage />
-          </PrivateRoute>
-        } />
+          {/* ダッシュボード */}
+          <Route path="/" element={
+            <PrivateRoute>
+              <Dashboard />
+            </PrivateRoute>
+          } />
 
-        {/* ▼ 新規追加: 資産管理(AssetPage)へのルート */}
-        <Route path="/assets" element={
-          <PrivateRoute>
-            <AssetPage />
-          </PrivateRoute>
-        } />
+          {/* 既存のポートフォリオページ */}
+          <Route path="/portfolio" element={
+            <PrivateRoute>
+              <PortfolioPage />
+            </PrivateRoute>
+          } />
 
-        {/* ローン管理 */}
-        <Route path="/loans" element={
-          <PrivateRoute>
-            <LoansPage />
-          </PrivateRoute>
-        } />
+          {/* 資産管理 */}
+          <Route path="/assets" element={
+            <PrivateRoute>
+              <AssetPage />
+            </PrivateRoute>
+          } />
 
-        {/* 収支管理 */}
-        <Route path="/cashflow" element={
-          <PrivateRoute>
-            <CashFlowPage />
-          </PrivateRoute>
-        } />
+          {/* ローン管理 */}
+          <Route path="/loans" element={
+            <PrivateRoute>
+              <LoansPage />
+            </PrivateRoute>
+          } />
 
-        {/* 積立管理 */}
-        <Route path="/investments" element={
-          <PrivateRoute>
-            <InvestmentPage />
-          </PrivateRoute>
-        } />
+          {/* 収支管理 */}
+          <Route path="/cashflow" element={
+            <PrivateRoute>
+              <CashFlowPage />
+            </PrivateRoute>
+          } />
 
-        {/* ライフプラン */}
-        <Route path="/life-plan" element={
-          <PrivateRoute>
-            <LifePlanPage />
-          </PrivateRoute>
-        } />
+          {/* 積立管理 */}
+          <Route path="/investments" element={
+            <PrivateRoute>
+              <InvestmentPage />
+            </PrivateRoute>
+          } />
 
-        {/* チャット・AIアドバイザー */}
-        <Route path="/chat" element={
-          <PrivateRoute>
-            <ChatPage />
-          </PrivateRoute>
-        } />
+          {/* ライフプラン */}
+          <Route path="/life-plan" element={
+            <PrivateRoute>
+              <LifePlanPage />
+            </PrivateRoute>
+          } />
 
-        {/* 設定 */}
-        <Route path="/settings" element={
-          <PrivateRoute>
-            <SettingsPage />
-          </PrivateRoute>
-        } />
+          {/* チャット・AIアドバイザー */}
+          <Route path="/chat" element={
+            <PrivateRoute>
+              <ChatPage />
+            </PrivateRoute>
+          } />
 
-        {/* ヘルプ */}
-        <Route path="/help" element={
-          <PrivateRoute>
-            <HelpPage />
-          </PrivateRoute>
-        } />
-      </Routes>
+          {/* 設定 */}
+          <Route path="/settings" element={
+            <PrivateRoute>
+              <SettingsPage />
+            </PrivateRoute>
+          } />
+
+          {/* ヘルプ */}
+          <Route path="/help" element={
+            <PrivateRoute>
+              <HelpPage />
+            </PrivateRoute>
+          } />
+        </Routes>
+      </div>
+
+      {/* スマホ用下部ナビゲーション (PCではCSSで非表示になります) */}
+      <MobileNavbar />
     </>
   );
 }
