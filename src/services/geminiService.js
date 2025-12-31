@@ -46,7 +46,17 @@ export const geminiService = {
     },
     async analyzeAssetImage(imageFile) {
         const imagePart = await this.fileToGenerativePart(imageFile);
-        const prompt = `資産画面解析: JSONのみ出力: { "assets": [{ "type": "日本株", "name": "銘柄", "code": "コード", "amount": 1234, "currency": "JPY" }], "total_valuation": 1234 }`;
+        const prompt = `資産画面解析: JSONのみ出力。
+        { 
+          "brokerName": "証券会社名",
+          "assets": [{ 
+            "type": "日本株|米国株|投資信託|預金|不動産|貴金属|暗号資産|その他", 
+            "accountType": "特定口座|新NISA (つみたて)|新NISA (成長枠)|旧NISA|iDeCo|一般口座",
+            "name": "銘柄名", 
+            "code": "銘柄コード", 
+            "amount": 数値
+          }] 
+        }`;
         const text = await generateWithFallback(prompt, imagePart);
         return JSON.parse(text.replace(/```json|```/g, '').trim());
     },

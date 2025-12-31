@@ -8,6 +8,8 @@ import {
     serverTimestamp, query, orderBy, setDoc
 } from 'firebase/firestore';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { geminiService } from '../services/geminiService';
+import { useRef } from 'react';
 
 const ACCOUNT_TYPES = ['特定口座', '新NISA (つみたて)', '新NISA (成長枠)', '旧NISA', 'iDeCo', '一般口座'];
 const ASSET_TYPES = ['日本株', '米国株', '投資信託', '預金', '不動産', '貴金属', '暗号資産', 'その他'];
@@ -20,6 +22,8 @@ const Icons = {
     Bank: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 10v8M11 10v8M15 10v8M3 21h18M7 3l4-2 4 2M3 7h18" /></svg>,
     ChevronDown: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>,
     Close: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>,
+    Camera: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+    Loading: () => <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>,
 };
 
 export default function AssetPage() {
@@ -38,6 +42,8 @@ export default function AssetPage() {
         owner: '自分',
         assets: []
     });
+    const [analyzing, setAnalyzing] = useState(false);
+    const fileInputRef = useRef(null);
 
     const fetchData = useCallback(async () => {
         if (!currentUser) return;
@@ -162,6 +168,43 @@ export default function AssetPage() {
         } catch (e) {
             console.error(e);
             alert("保存に失敗しました");
+        }
+    };
+
+    const handleAnalyzeImage = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setAnalyzing(true);
+        try {
+            const result = await geminiService.analyzeAssetImage(file);
+            console.log("AI result:", result);
+
+            // 取得した資産データをフォームに統合
+            if (result.assets && Array.isArray(result.assets)) {
+                // 既存の空行を除去して追加
+                const currentAssets = editForm.assets.filter(a => a.name !== '' || a.amount !== '');
+                const newAssets = result.assets.map(a => ({
+                    type: a.type || '投資信託',
+                    accountType: a.accountType || '特定口座',
+                    name: a.name || '',
+                    code: a.code || '',
+                    amount: a.amount || 0
+                }));
+
+                setEditForm(prev => ({
+                    ...prev,
+                    brokerName: prev.brokerName || result.brokerName || '',
+                    assets: [...currentAssets, ...newAssets]
+                }));
+                alert(`${newAssets.length}件の銘柄を読み込みました。`);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("画像の解析に失敗しました。");
+        } finally {
+            setAnalyzing(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
@@ -488,6 +531,37 @@ export default function AssetPage() {
                                     </select>
                                 </div>
                             </div>
+
+                            {/* AI 読み取りセクション */}
+                            {!editingId && (
+                                <div className="mb-6 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-white p-2.5 rounded-xl shadow-sm border border-indigo-50 text-indigo-600">
+                                            <Icons.Camera />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-black text-indigo-900">AI スキャン入力</p>
+                                            <p className="text-[10px] text-indigo-500 mt-0.5">証券画面のスクショから銘柄を自動読み込み</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={analyzing}
+                                        className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-[11px] font-black hover:bg-indigo-700 transition-all flex items-center gap-2 disabled:bg-indigo-300"
+                                    >
+                                        {analyzing ? <Icons.Loading /> : <Icons.Camera />}
+                                        {analyzing ? '解析中...' : 'スクショを選択'}
+                                    </button>
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={handleAnalyzeImage}
+                                        accept="image/*"
+                                        className="hidden"
+                                    />
+                                </div>
+                            )}
 
                             {/* 銘柄リスト */}
                             <div className="mb-4">

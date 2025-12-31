@@ -1,16 +1,23 @@
-# React + Vite
+# LifeScape (ライフスケープ) 🌿
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+現在の資産状況を可視化し、将来のライフプランと連結させる資産管理アプリケーションです。
 
-Currently, two official plugins are available:
+## 🌐 デモサイト
+[https://portfolio-migration-sim-12345.web.app](https://portfolio-migration-sim-12345.web.app)
+## 📖 概要
+「今の資産（ポートフォリオ）」と「将来の計画（ライフプラン）」が分断されている課題を解決するために開発しました。
+現在の資産を入力すると、円グラフで可視化され、ワンクリックでライフプランシミュレーションの初期値として反映されます。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 🛠 使用技術
+- **Frontend**: React, Vite, Tailwind CSS, Recharts
+- **Backend/Infrastracture**: Firebase (Hosting, Firestore, Authentication)
+- **AI**: Gemini API (画像解析機能・実装予定)
 
-## React Compiler
+## ✨ 主な機能
+1. **資産ポートフォリオ管理**: 現金・株・投資信託などの資産割合を円グラフで可視化
+2. **ライフプラン連携**: 現在の資産額を将来シミュレーションへ自動同期
+3. **認証機能**: Googleアカウントによるログイン・データ保存
+4. **レスポンシブ対応**: スマートフォン・PCでの利用
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 🚀 今後の展望
+- Firebase Storage連携による、証券口座スクショのAI自動読み取り機能の実装
