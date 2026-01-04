@@ -27,6 +27,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: SPA Fixes
+        run: |
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
+
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
         with:
