@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthHelpers';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, getDoc, Timestamp, updateDoc } from 'firebase/firestore';
 import { geminiService } from '../services/geminiService';
@@ -74,7 +74,7 @@ export default function CashFlowPage() {
                     setMembers(s.data().members);
                     setIncOwner(s.data().members[0]); setExpOwner(s.data().members[0]);
                 }
-            } catch (e) { }
+            } catch (err) { console.error(err); }
             fetchData();
         };
         init();
@@ -91,7 +91,7 @@ export default function CashFlowPage() {
             if (file.type.includes('csv') || file.name.endsWith('.csv')) res = await geminiService.analyzeCsvText(await file.text());
             else if (file.type.startsWith('image/')) res = await geminiService.analyzeReceiptImage(file);
             setScannedItems(res);
-        } catch (e) { alert(`解析エラー: ${e.message}`); } finally { setIsScanning(false); }
+        } catch (err) { alert(`解析エラー: ${err.message}`); } finally { setIsScanning(false); }
     };
     const handleDrag = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(e.type === "dragenter" || e.type === "dragover"); };
     const handleDrop = (e) => { handleDrag(e); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); };
@@ -113,7 +113,7 @@ export default function CashFlowPage() {
                 return addDoc(collection(db, 'users', currentUser.uid, col), data);
             }));
             setScannedItems([]); fetchData();
-        } catch (e) { alert("保存失敗"); } finally { setSubmitting(false); }
+        } catch (err) { console.error(err); alert("保存失敗"); } finally { setSubmitting(false); }
     };
 
     const resetForm = () => {

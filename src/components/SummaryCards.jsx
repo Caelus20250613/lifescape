@@ -1,6 +1,6 @@
 import React from 'react';
 
-const SummaryCards = ({ totalAsset, retirementAge }) => {
+const SummaryCards = ({ totalAsset }) => {
     const formatYen = (v) => new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }).format(v);
 
     return (

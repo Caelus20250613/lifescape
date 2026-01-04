@@ -3,7 +3,26 @@ import { geminiService } from '../services/geminiService';
 import { fetchStockPrice } from '../services/stockService';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp, getDocs, orderBy, query, deleteDoc, doc, where, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthHelpers';
+import { useExchangeRates, convertToJPY, SUPPORTED_CURRENCIES } from '../hooks/useExchangeRates';
+
+const ASSET_TYPES = [
+    '投資信託',
+    '日本株',
+    '米国株',
+    '外国株',
+    'ETF',
+    '円預金',
+    '外貨預金',
+    '外貨建てMMF',
+    '債券',
+    '不動産',
+    '貴金属',
+    '暗号資産',
+    '小規模企業共済',
+    '貯蓄型保険',
+    'その他'
+];
 
 export default function PortfolioPage() {
     const { currentUser } = useAuth();
@@ -18,16 +37,12 @@ export default function PortfolioPage() {
     // Members settings
     const [members, setMembers] = useState(['自分', '家族共通']);
     const [owner, setOwner] = useState('自分');
-    const [accountType, setAccountType] = useState('特定口座');
-
-    // Real-time prices state
-    const [livePrices, setLivePrices] = useState({});
-    const [loadingPrices, setLoadingPrices] = useState(false);
+    const { rates } = useExchangeRates();
 
     // Manual Input State
     const [inputMode, setInputMode] = useState('scan'); // 'scan' | 'manual'
     const [manualAssets, setManualAssets] = useState([
-        { type: '日本株', name: '', code: '', amount: '', currency: 'JPY', accountType: '特定口座' }
+        { type: '日本株', name: '', code: '', amount: '', acquisitionCost: '', currency: 'JPY', foreignAmount: '', accountType: '特定口座' }
     ]);
 
     // Editing State (Portfolio level)
@@ -81,7 +96,6 @@ export default function PortfolioPage() {
 
     const fetchRealTimePrices = async (tickers) => {
         if (!tickers || tickers.length === 0) return;
-        setLoadingPrices(true);
         const newPrices = { ...livePrices };
 
         const MAX_CALLS = 5;
@@ -97,7 +111,6 @@ export default function PortfolioPage() {
             }
         }
         setLivePrices(newPrices);
-        setLoadingPrices(false);
     };
 
     const handleFetchPricesForDoc = (assets) => {
@@ -157,7 +170,7 @@ export default function PortfolioPage() {
     }, [inputMode]);
 
     const addManualRow = () => {
-        setManualAssets([...manualAssets, { type: '日本株', name: '', code: '', amount: '', currency: 'JPY', accountType: '特定口座' }]);
+        setManualAssets([...manualAssets, { type: '日本株', name: '', code: '', amount: '', acquisitionCost: '', currency: 'JPY', foreignAmount: '', accountType: '特定口座' }]);
     };
 
     const removeManualRow = (index) => {
@@ -165,7 +178,7 @@ export default function PortfolioPage() {
             const newAssets = manualAssets.filter((_, i) => i !== index);
             setManualAssets(newAssets);
         } else {
-            setManualAssets([{ type: '日本株', name: '', code: '', amount: '', currency: 'JPY', accountType: '特定口座' }]);
+            setManualAssets([{ type: '日本株', name: '', code: '', amount: '', acquisitionCost: '', currency: 'JPY', accountType: '特定口座' }]);
         }
     };
 
@@ -175,12 +188,28 @@ export default function PortfolioPage() {
         if (field === 'type' && (value === '不動産' || value === '預金' || value === '貴金属')) {
             newAssets[index].accountType = '一般口座';
         }
+
+        // 外貨対応
+        const isForeignType = ['米国株', '外国株', 'ETF', '外貨預金', '外貨建てMMF'].includes(newAssets[index].type);
+        if (field === 'type') {
+            if (isForeignType) {
+                newAssets[index].currency = newAssets[index].currency || 'USD';
+            } else {
+                newAssets[index].currency = 'JPY';
+                newAssets[index].foreignAmount = '';
+            }
+        }
+
+        // 外貨金額入力時に円換算額を自動計算して表示用amountにセット
+        if (isForeignType && (field === 'foreignAmount' || field === 'currency')) {
+            const currency = field === 'currency' ? value : (newAssets[index].currency || 'USD');
+            const fAmt = field === 'foreignAmount' ? value : (newAssets[index].foreignAmount || 0);
+            newAssets[index].amount = convertToJPY(fAmt, currency, rates);
+        }
+
         setManualAssets(newAssets);
     };
 
-    const calculateManualTotal = () => {
-        return manualAssets.reduce((sum, asset) => sum + Number(asset.amount || 0), 0);
-    };
 
     const handleSaveData = async () => {
         if (!currentUser) return;
@@ -202,11 +231,22 @@ export default function PortfolioPage() {
                 alert("少なくとも1つの有効な資産を入力してください（銘柄名と金額は必須です）");
                 return;
             }
-            assetsToSave = validAssets.map(a => ({
-                ...a,
-                amount: Number(a.amount)
-            }));
-            totalValuation = assetsToSave.reduce((sum, a) => sum + a.amount, 0);
+            assetsToSave = validAssets.map(a => {
+                const isForeign = ['米国株', '外国株', 'ETF', '外貨預金', '外貨建てMMF'].includes(a.type);
+                // 外貨建ての場合は量(amount)として外貨額を保存する。LifePlanPageでの一括換算ロジックと合わせるため。
+                const finalAmount = isForeign ? Number(a.foreignAmount || 0) : Number(a.amount);
+                return {
+                    ...a,
+                    amount: finalAmount,
+                    foreignAmount: isForeign ? Number(a.foreignAmount || 0) : 0,
+                    acquisitionCost: a.acquisitionCost !== '' ? Number(a.acquisitionCost) : finalAmount
+                };
+            });
+            totalValuation = assetsToSave.reduce((sum, a) => {
+                const isForeign = ['米国株', '外国株', 'ETF', '外貨預金', '外貨建てMMF'].includes(a.type);
+                const yenVal = isForeign ? convertToJPY(a.amount, a.currency, rates) : a.amount;
+                return sum + yenVal;
+            }, 0);
         }
 
         setSaving(true);
@@ -228,7 +268,7 @@ export default function PortfolioPage() {
             if (!querySnapshot.empty) {
                 const docId = querySnapshot.docs[0].id;
                 const docRef = doc(db, 'users', currentUser.uid, 'portfolios', docId);
-                const { createdAt, ...updateData } = portfolioData;
+                const { createdAt: _createdAt, ...updateData } = portfolioData;
                 await setDoc(docRef, { ...updateData, updatedAt: serverTimestamp() }, { merge: true });
                 alert(`「${brokerName} (${owner})」のデータを更新しました。`);
             } else {
@@ -237,7 +277,7 @@ export default function PortfolioPage() {
             }
 
             setData(null);
-            setManualAssets([{ type: '日本株', name: '', code: '', amount: '', currency: 'JPY', accountType: '特定口座' }]);
+            setManualAssets([{ type: '日本株', name: '', code: '', amount: '', acquisitionCost: '', currency: 'JPY', foreignAmount: '', accountType: '特定口座' }]);
             setAccountType('特定口座');
             fetchHistory();
         } catch (error) {
@@ -268,7 +308,8 @@ export default function PortfolioPage() {
         // Ensure each asset has accountType
         const preparedAssets = clonedAssets.map(a => ({
             ...a,
-            accountType: a.accountType || '特定口座'
+            accountType: a.accountType || '特定口座',
+            acquisitionCost: a.acquisitionCost ?? (a.amount || 0)
         }));
         setEditForm({
             brokerName: item.brokerName || '',
@@ -297,7 +338,7 @@ export default function PortfolioPage() {
     const addEditAsset = () => {
         setEditForm({
             ...editForm,
-            assets: [...editForm.assets, { type: '日本株', name: '', code: '', amount: 0, currency: 'JPY', accountType: '特定口座' }]
+            assets: [...editForm.assets, { type: '日本株', name: '', code: '', amount: 0, acquisitionCost: 0, currency: 'JPY', foreignAmount: '', accountType: '特定口座' }]
         });
     };
 
@@ -309,14 +350,22 @@ export default function PortfolioPage() {
         }
 
         const validAssets = editForm.assets.filter(a => a.name.trim() !== '');
-        const totalValuation = validAssets.reduce((sum, a) => sum + Number(a.amount || 0), 0);
+        const totalValuation = validAssets.reduce((sum, a) => {
+            const isForeign = ['米国株', '外国株', 'ETF', '外貨預金', '外貨建てMMF'].includes(a.type);
+            const yenVal = isForeign ? convertToJPY(a.amount, a.currency, rates) : Number(a.amount || 0);
+            return sum + yenVal;
+        }, 0);
 
         try {
             const docRef = doc(db, 'users', currentUser.uid, 'portfolios', editingId);
             await updateDoc(docRef, {
                 brokerName: editForm.brokerName,
                 owner: editForm.owner || '自分',
-                assets: validAssets.map(a => ({ ...a, amount: Number(a.amount || 0) })),
+                assets: validAssets.map(a => ({
+                    ...a,
+                    amount: Number(a.amount || 0),
+                    acquisitionCost: Number(a.acquisitionCost || a.amount || 0)
+                })),
                 total_valuation: totalValuation,
                 updatedAt: serverTimestamp()
             });
@@ -341,7 +390,8 @@ export default function PortfolioPage() {
             const num = Number(String(amount).replace(/,/g, ''));
             if (isNaN(num)) return amount;
             return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: currency || 'JPY' }).format(num);
-        } catch (e) {
+        } catch (err) {
+            console.error(err);
             return amount;
         }
     };
@@ -419,7 +469,7 @@ export default function PortfolioPage() {
                                 </div>
                                 <div className="border rounded-lg overflow-hidden">
                                     <table className="min-w-full divide-y divide-gray-200">
-                                        <thead className="bg-gray-50"><tr><th className="px-6 py-3 text-left text-xs text-gray-500 uppercase">資産タイプ</th><th className="px-6 py-3 text-left text-xs text-gray-500 uppercase">口座区分</th><th className="px-6 py-3 text-left text-xs text-gray-500 uppercase">銘柄名</th><th className="px-6 py-3 text-right text-xs text-gray-500 uppercase">金額</th></tr></thead>
+                                        <thead className="bg-gray-50"><tr><th className="px-6 py-3 text-left text-xs text-gray-500 uppercase">資産タイプ</th><th className="px-6 py-3 text-left text-xs text-gray-500 uppercase">口座区分</th><th className="px-6 py-3 text-left text-xs text-gray-500 uppercase">銘柄名</th><th className="px-6 py-3 text-right text-xs text-gray-500 uppercase">取得元本</th><th className="px-6 py-3 text-right text-xs text-gray-500 uppercase">評価額</th></tr></thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {data.assets.map((asset, index) => (
                                                 <tr key={index}>
@@ -442,6 +492,19 @@ export default function PortfolioPage() {
                                                         )}
                                                     </td>
                                                     <td className="px-6 py-4 text-sm font-bold text-gray-900">{asset.name} {asset.code && <span className="text-gray-400 text-xs">({asset.code})</span>}</td>
+                                                    <td className="px-6 py-4 text-sm text-gray-500 text-right font-mono">
+                                                        <input
+                                                            type="number"
+                                                            value={asset.acquisitionCost || ''}
+                                                            onChange={(e) => {
+                                                                const newData = { ...data };
+                                                                newData.assets[index].acquisitionCost = Number(e.target.value);
+                                                                setData(newData);
+                                                            }}
+                                                            placeholder="元本"
+                                                            className="w-24 text-right border-gray-200 rounded text-xs p-1"
+                                                        />
+                                                    </td>
                                                     <td className="px-6 py-4 text-sm text-gray-900 text-right font-mono">{formatCurrency(asset.amount)}</td>
                                                 </tr>
                                             ))}
@@ -464,11 +527,11 @@ export default function PortfolioPage() {
                         </div>
                         <div className="overflow-x-auto border rounded-lg">
                             <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left text-xs text-gray-500 uppercase">資産タイプ</th><th className="px-4 py-3 text-left text-xs text-gray-500 uppercase">口座区分</th><th className="px-4 py-3 text-left text-xs text-gray-500 uppercase">銘柄名</th><th className="px-4 py-3 text-left text-xs text-gray-500 uppercase w-24">コード</th><th className="px-4 py-3 text-right text-xs text-gray-500 uppercase w-36">金額</th><th className="px-4 py-3 text-center text-xs text-gray-500 uppercase w-12">削除</th></tr></thead>
+                                <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left text-xs text-gray-500 uppercase">資産タイプ</th><th className="px-4 py-3 text-left text-xs text-gray-500 uppercase">口座区分</th><th className="px-4 py-3 text-left text-xs text-gray-500 uppercase">銘柄名</th><th className="px-4 py-3 text-left text-xs text-gray-500 uppercase w-24">コード</th><th className="px-4 py-3 text-right text-xs text-gray-500 uppercase w-32">取得元本</th><th className="px-4 py-3 text-right text-xs text-gray-500 uppercase w-32">評価額</th><th className="px-4 py-3 text-center text-xs text-gray-500 uppercase w-12">削除</th></tr></thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {manualAssets.map((asset, index) => (
                                         <tr key={index}>
-                                            <td className="px-4 py-2"><select value={asset.type} onChange={(e) => updateManualRow(index, 'type', e.target.value)} className="w-full text-sm border-gray-300 rounded-md">{['日本株', '米国株', '投資信託', '預金', '不動産', '貴金属', '暗号資産', 'その他'].map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                                            <td className="px-4 py-2"><select value={asset.type} onChange={(e) => updateManualRow(index, 'type', e.target.value)} className="w-full text-sm border-gray-300 rounded-md">{ASSET_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
                                             <td className="px-4 py-2">
                                                 {(asset.type === '不動産' || asset.type === '貴金属') ? (
                                                     <span className="text-gray-400 text-xs font-medium p-2 block">一般口座</span>
@@ -484,7 +547,30 @@ export default function PortfolioPage() {
                                             </td>
                                             <td className="px-4 py-2"><input type="text" value={asset.name} onChange={(e) => updateManualRow(index, 'name', e.target.value)} className="w-full text-sm border-gray-300 rounded-md" placeholder="トヨタ..." /></td>
                                             <td className="px-4 py-2"><input type="text" value={asset.code} onChange={(e) => updateManualRow(index, 'code', e.target.value)} className="w-full text-sm border-gray-300 rounded-md" placeholder="7203" /></td>
-                                            <td className="px-4 py-2"><input type="number" value={asset.amount} onChange={(e) => updateManualRow(index, 'amount', e.target.value)} className="w-full text-sm text-right border-gray-300 rounded-md" /></td>
+                                            <td className="px-4 py-2"><input type="number" value={asset.acquisitionCost} onChange={(e) => updateManualRow(index, 'acquisitionCost', e.target.value)} className="w-full text-sm text-right border-gray-300 rounded-md bg-orange-50/30" placeholder="元本" /></td>
+                                            <td className="px-4 py-2">
+                                                {['米国株', '外国株', 'ETF', '外貨預金', '外貨建てMMF'].includes(asset.type) ? (
+                                                    <div className="flex gap-1 items-center">
+                                                        <select
+                                                            value={asset.currency || 'USD'}
+                                                            onChange={(e) => updateManualRow(index, 'currency', e.target.value)}
+                                                            className="text-[10px] border border-gray-300 rounded p-1 outline-none font-bold text-indigo-700 w-16"
+                                                        >
+                                                            {SUPPORTED_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                        </select>
+                                                        <input
+                                                            type="number"
+                                                            value={asset.foreignAmount || ''}
+                                                            onChange={(e) => updateManualRow(index, 'foreignAmount', e.target.value)}
+                                                            className="w-20 text-xs text-right border border-gray-300 rounded p-1 outline-none font-bold font-mono"
+                                                            placeholder="外貨"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[10px] text-gray-300 px-1">---</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-2"><input type="number" value={asset.amount} onChange={(e) => updateManualRow(index, 'amount', e.target.value)} className="w-full text-sm text-right border-gray-300 rounded-md" readOnly={['米国株', '外国株', 'ETF', '外貨預金', '外貨建てMMF'].includes(asset.type)} /></td>
                                             <td className="px-4 py-2 text-center text-red-500 cursor-pointer" onClick={() => removeManualRow(index)}>✖</td>
                                         </tr>
                                     ))}
@@ -543,7 +629,7 @@ export default function PortfolioPage() {
                                                 <h4 className="text-xs font-black text-blue-800 mb-2 uppercase tracking-wide">銘柄リストの編集</h4>
                                                 <div className="bg-white rounded border border-blue-100 overflow-hidden">
                                                     <table className="min-w-full divide-y divide-gray-100">
-                                                        <thead className="bg-gray-50 text-[10px] text-gray-400 uppercase font-black"><tr><th className="px-4 py-2 text-left">銘柄名</th><th className="px-4 py-2 text-left">口座区分</th><th className="px-4 py-2 text-right">評価額</th><th className="px-2 py-2"></th></tr></thead>
+                                                        <thead className="bg-gray-50 text-[10px] text-gray-400 uppercase font-black"><tr><th className="px-4 py-2 text-left w-32">銘柄名</th><th className="px-4 py-2 text-left">口座区分</th><th className="px-4 py-2 text-left">外貨</th><th className="px-4 py-2 text-right">取得元本</th><th className="px-4 py-2 text-right">評価額</th><th className="px-2 py-2"></th></tr></thead>
                                                         <tbody className="divide-y divide-gray-50">
                                                             {editForm.assets.map((asset, idx) => (
                                                                 <tr key={idx} className="hover:bg-blue-50/20 text-sm">
@@ -557,7 +643,24 @@ export default function PortfolioPage() {
                                                                             </select>
                                                                         )}
                                                                     </td>
-                                                                    <td className="px-4 py-2"><input type="number" value={asset.amount} onChange={(e) => updateEditAsset(idx, 'amount', e.target.value)} className="w-full text-right border-none p-1 focus:ring-0 font-mono font-bold" /></td>
+                                                                    <td className="px-4 py-2">
+                                                                        {['米国株', '外国株', 'ETF', '外貨預金', '外貨建てMMF'].includes(asset.type) ? (
+                                                                            <div className="flex gap-1 items-center">
+                                                                                <select value={asset.currency || 'USD'} onChange={(e) => updateEditAsset(idx, 'currency', e.target.value)} className="text-[10px] border border-gray-200 rounded p-1 text-indigo-700 font-bold">
+                                                                                    {SUPPORTED_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                                                </select>
+                                                                                <input type="number" value={asset.foreignAmount || ''} onChange={(e) => {
+                                                                                    const val = e.target.value;
+                                                                                    const newAssets = [...editForm.assets];
+                                                                                    newAssets[idx].foreignAmount = val;
+                                                                                    newAssets[idx].amount = convertToJPY(val, asset.currency || 'USD', rates);
+                                                                                    setEditForm({ ...editForm, assets: newAssets });
+                                                                                }} className="w-16 border-none p-1 focus:ring-0 font-mono text-[10px] bg-indigo-50/30 rounded" placeholder="外貨" />
+                                                                            </div>
+                                                                        ) : <span className="text-[10px] text-gray-300">---</span>}
+                                                                    </td>
+                                                                    <td className="px-4 py-2"><input type="number" value={asset.acquisitionCost} onChange={(e) => updateEditAsset(idx, 'acquisitionCost', e.target.value)} className="w-full text-right border-none p-1 focus:ring-0 font-mono text-gray-500" /></td>
+                                                                    <td className="px-4 py-2"><input type="number" value={asset.amount} onChange={(e) => updateEditAsset(idx, 'amount', e.target.value)} className="w-full text-right border-none p-1 focus:ring-0 font-mono font-bold text-blue-600" readOnly={['米国株', '外国株', 'ETF', '外貨預金', '外貨建てMMF'].includes(asset.type)} /></td>
                                                                     <td className="px-2 py-2 text-center text-red-300 hover:text-red-500 cursor-pointer" onClick={() => removeEditAsset(idx)}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></td>
                                                                 </tr>
                                                             ))}
@@ -575,19 +678,29 @@ export default function PortfolioPage() {
                                             {item.assets && item.assets.length > 0 ? (
                                                 <div className="overflow-x-auto">
                                                     <table className="min-w-full divide-y divide-gray-100 mb-4">
-                                                        <thead className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest"><tr><th className="px-6 py-3 text-left">タイプ</th><th className="px-6 py-3 text-left">銘柄名</th><th className="px-6 py-3 text-right">評価額</th></tr></thead>
+                                                        <thead className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest"><tr><th className="px-6 py-3 text-left">タイプ</th><th className="px-6 py-3 text-left">銘柄名</th><th className="px-6 py-3 text-right">取得元本</th><th className="px-6 py-3 text-right">評価額</th><th className="px-6 py-3 text-right">評価損益</th></tr></thead>
                                                         <tbody className="bg-white divide-y divide-gray-50">
-                                                            {item.assets.map((asset, idx) => (
-                                                                <tr key={idx} className="hover:bg-gray-50/50">
-                                                                    <td className="px-6 py-3 text-[10px] font-bold text-gray-400 uppercase">{asset.type}</td>
-                                                                    <td className="px-6 py-3 text-sm text-gray-900 font-bold flex items-center">
-                                                                        {getAccountTypeBadge(asset.accountType)}
-                                                                        {asset.name}
-                                                                        {asset.code && <span className="text-gray-300 ml-1 text-[10px] font-mono">({asset.code})</span>}
-                                                                    </td>
-                                                                    <td className="px-6 py-3 text-sm font-mono font-bold text-right">{formatCurrency(asset.amount)}</td>
-                                                                </tr>
-                                                            ))}
+                                                            {item.assets.map((asset, idx) => {
+                                                                const profit = Number(asset.amount || 0) - Number(asset.acquisitionCost || asset.amount || 0);
+                                                                const isPositive = profit > 0;
+                                                                const isNegative = profit < 0;
+
+                                                                return (
+                                                                    <tr key={idx} className="hover:bg-gray-50/50">
+                                                                        <td className="px-6 py-3 text-[10px] font-bold text-gray-400 uppercase">{asset.type}</td>
+                                                                        <td className="px-6 py-3 text-sm text-gray-900 font-bold flex items-center">
+                                                                            {getAccountTypeBadge(asset.accountType)}
+                                                                            {asset.name}
+                                                                            {asset.code && <span className="text-gray-300 ml-1 text-[10px] font-mono">({asset.code})</span>}
+                                                                        </td>
+                                                                        <td className="px-6 py-3 text-sm font-mono text-gray-400 text-right">{formatCurrency(asset.acquisitionCost || asset.amount)}</td>
+                                                                        <td className="px-6 py-3 text-sm font-mono font-bold text-right">{formatCurrency(asset.amount)}</td>
+                                                                        <td className={`px-6 py-3 text-sm font-mono font-black text-right ${isPositive ? 'text-green-600' : isNegative ? 'text-red-500' : 'text-gray-400'}`}>
+                                                                            {isPositive ? '+' : ''}{formatCurrency(isForeign ? convertToJPY(profit, asset.currency, rates) : profit)}
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
                                                         </tbody>
                                                     </table>
                                                 </div>
@@ -617,7 +730,10 @@ export default function PortfolioPage() {
             {showHelp && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                     <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="p-6 border-b flex justify-between items-center bg-gray-50"><h3 className="text-xl font-bold text-gray-800">資産管理ガイド</h3><button onClick={() => setShowHelp(false)} className="text-gray-400">✖</button></div>
+                        <div className="p-6 border-b flex justify-between items-center bg-gray-50">
+                            <h3 className="text-xl font-bold text-gray-800">資産管理ガイド</h3>
+                            <button onClick={() => setShowHelp(false)} className="text-gray-400 font-bold text-xl">×</button>
+                        </div>
                         <div className="p-8 space-y-6 text-sm text-gray-600">
                             <section><h4 className="font-bold text-gray-900 mb-2">1. 銘柄単位の口座管理</h4>銘柄ごとに「新NISA」や「特定口座」を設定できます。これがライフプランの税金計算に反映されます。</section>
                             <section><h4 className="font-bold text-gray-900 mb-2">2. 履歴の編集</h4>登録済みのポートフォリオの青い枠内から、銘柄名や金額、口座区分を直接編集でき、追加や削除も可能です。</section>

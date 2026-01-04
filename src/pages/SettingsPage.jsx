@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../contexts/AuthHelpers';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -10,11 +10,7 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
-        fetchSettings();
-    }, [currentUser]);
-
-    const fetchSettings = async () => {
+    const fetchSettings = useCallback(async () => {
         if (!currentUser) return;
         try {
             const docRef = doc(db, 'users', currentUser.uid, 'settings', 'general');
@@ -27,7 +23,9 @@ export default function SettingsPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [currentUser]);
+
+    useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
     const handleSave = async (updatedMembers) => {
         if (!currentUser) return;

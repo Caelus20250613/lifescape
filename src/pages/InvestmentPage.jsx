@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../contexts/AuthHelpers';
 import { db } from '../firebase';
 import {
     collection,
@@ -23,6 +23,7 @@ const Icons = {
     Bank: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 10v8M11 10v8M15 10v8M3 21h18M7 3l4-2 4 2M3 7h18" /></svg>,
     Chart: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>,
     Spot: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>,
+    Wallet: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>,
 };
 
 // iDeCo月額上限 (2024-2025年基準)
@@ -37,16 +38,15 @@ const IDECO_LIMITS = {
 
 // 口座種別定義
 const ACCOUNT_TYPES = {
-    nisa_tsumitate: { label: '新NISA (つみたて投資枠)', color: 'bg-indigo-600', textColor: 'text-indigo-600', limit: 1200000 },
-    nisa_growth: { label: '新NISA (成長投資枠)', color: 'bg-indigo-400', textColor: 'text-indigo-400', limit: 2400000 },
+    nisa_tsumitate: { label: '新NISA (つみたて)', color: 'bg-indigo-600', textColor: 'text-indigo-600', limit: 1200000 },
+    nisa_growth: { label: '新NISA (成長)', color: 'bg-indigo-400', textColor: 'text-indigo-400', limit: 2400000 },
     ideco: { label: 'iDeCo', color: 'bg-emerald-600', textColor: 'text-emerald-600', limit: null }, // limitは動的計算
-    taxable: { label: '特定口座/一般口座 (課税)', color: 'bg-gray-600', textColor: 'text-gray-600', limit: null },
+    taxable: { label: '特定口座 (課税)', color: 'bg-slate-600', textColor: 'text-slate-600', limit: null }, // 上限なし
 };
 
 export default function InvestmentPage() {
     const { currentUser } = useAuth();
     const [investments, setInvestments] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [editingId, setEditingId] = useState(null);
     const [showModal, setShowModal] = useState(false);
     const [occupation, setOccupation] = useState('会社員 (企業型DC・DBなし)');
@@ -61,9 +61,8 @@ export default function InvestmentPage() {
     const [spotAmount, setSpotAmount] = useState('');
     const [spotDate, setSpotDate] = useState(new Date().toISOString().split('T')[0]);
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         if (!currentUser) return;
-        setLoading(true);
         try {
             const q = query(collection(db, 'users', currentUser.uid, 'investments'), orderBy('createdAt', 'desc'));
             const snap = await getDocs(q);
@@ -76,12 +75,17 @@ export default function InvestmentPage() {
             }
         } catch (e) {
             console.error("データ取得エラー:", e);
-        } finally {
-            setLoading(false);
         }
-    };
+    }, [currentUser]);
 
-    useEffect(() => { fetchData(); }, [currentUser]);
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            if (!mounted) return;
+            await fetchData();
+        })();
+        return () => { mounted = false; };
+    }, [fetchData]);
 
     const handleOccupationChange = async (val) => {
         setOccupation(val);
@@ -123,7 +127,7 @@ export default function InvestmentPage() {
         let data = {
             name,
             institution,
-            accountType,
+            accountType: accountType.toLowerCase(), // 保存時に小文字化して表記ゆれを防ぐ
             type,
             updatedAt: serverTimestamp()
         };
@@ -138,6 +142,7 @@ export default function InvestmentPage() {
 
         try {
             if (editingId) {
+                // 既存データの更新: accountTypeの上書き更新を確認
                 await updateDoc(doc(db, 'users', currentUser.uid, 'investments', editingId), data);
             } else {
                 await addDoc(collection(db, 'users', currentUser.uid, 'investments'), { ...data, createdAt: serverTimestamp() });
@@ -184,12 +189,19 @@ export default function InvestmentPage() {
     const recurringItems = investments.filter(i => (i.type || 'recurring') === 'recurring');
     const spotItems = investments.filter(i => i.type === 'spot');
 
+    // 全体の合計を計算
+    const totalAnnualInvestment =
+        calculateAnnualTotal('nisa_tsumitate') +
+        calculateAnnualTotal('nisa_growth') +
+        calculateAnnualTotal('ideco') +
+        calculateAnnualTotal('taxable');
+
     return (
         <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6">
-            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div>
                     <h1 className="text-3xl font-black text-gray-900 tracking-tight">積立 & 投資管理</h1>
-                    <p className="text-sm text-gray-500 mt-1">NISA枠の管理から将来の積立設定まで</p>
+                    <p className="text-sm text-gray-500 mt-1">NISA・iDeCo・特定口座の積立を一元管理</p>
                 </div>
                 <button
                     onClick={() => { resetForm(); setShowModal(true); }}
@@ -198,6 +210,21 @@ export default function InvestmentPage() {
                     <Icons.Plus /> <span>投資を追加</span>
                 </button>
             </header>
+
+            {/* 投資全体サマリー (新規追加) */}
+            <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl p-8 mb-10 text-white shadow-lg relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+                <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
+                    <div>
+                        <p className="text-gray-400 font-bold uppercase text-xs tracking-widest mb-1">年間投資予定額 (全体)</p>
+                        <p className="text-4xl font-black">{formatYen(totalAnnualInvestment)}<span className="text-lg text-gray-400 font-bold ml-2">/ 年</span></p>
+                    </div>
+                    <div className="bg-white/10 px-6 py-4 rounded-2xl backdrop-blur-sm border border-white/10">
+                        <p className="text-gray-300 font-bold text-xs uppercase tracking-widest mb-1">月平均</p>
+                        <p className="text-2xl font-black">{formatYen(totalAnnualInvestment / 12)}</p>
+                    </div>
+                </div>
+            </div>
 
             {/* 属性設定 */}
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-8 flex flex-col md:flex-row items-center justify-between gap-6">
@@ -217,30 +244,41 @@ export default function InvestmentPage() {
                 </select>
             </div>
 
-            {/* 進捗バー・サマリー (年間) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            {/* 口座別状況カード (4つに拡張) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
                 {[
                     { label: 'NISA (つみたて)', val: calculateAnnualTotal('nisa_tsumitate'), limit: ACCOUNT_TYPES.nisa_tsumitate.limit, color: 'indigo', icon: '✨' },
                     { label: 'NISA (成長)', val: calculateAnnualTotal('nisa_growth'), limit: ACCOUNT_TYPES.nisa_growth.limit, color: 'blue', icon: '🚀' },
                     { label: 'iDeCo (年間)', val: calculateAnnualTotal('ideco'), limit: idecoAnnualLimit, color: 'emerald', icon: '🛡️' },
+                    { label: '特定口座 (課税)', val: calculateAnnualTotal('taxable'), limit: null, color: 'slate', icon: '💰' }, // 新規追加
                 ].map(p => (
-                    <div key={p.label} className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group">
-                        <div className={`absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 bg-${p.color}-50 rounded-full opacity-50 group-hover:scale-110 transition-transform`}></div>
-                        <div className="relative z-10">
-                            <div className="flex justify-between items-end mb-4">
-                                <div>
-                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">{p.icon} {p.label} / 年</span>
-                                    <span className="text-2xl font-black text-gray-900">{formatYen(p.val)}</span>
+                    <div key={p.label} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group hover:shadow-md transition-all">
+                        <div className={`absolute top-0 right-0 w-20 h-20 -mr-6 -mt-6 bg-${p.color}-50 rounded-full opacity-50 group-hover:scale-110 transition-transform`}></div>
+                        <div className="relative z-10 flex flex-col h-full justify-between">
+                            <div className="mb-4">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">{p.icon} {p.label}</span>
+                                <span className="text-xl font-black text-gray-900">{formatYen(p.val)}</span>
+                                <p className="text-[10px] text-gray-400 mt-1 font-bold">
+                                    {p.limit ? `あと ${formatYen(Math.max(0, p.limit - p.val))}` : '上限なし (青天井)'}
+                                </p>
+                            </div>
+
+                            {p.limit ? (
+                                // 上限ありの場合: プログレスバー
+                                <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                                    <div
+                                        className={`h-full rounded-full transition-all duration-1000 ${p.val > p.limit ? 'bg-red-500' : `bg-${p.color}-500`}`}
+                                        style={{ width: `${Math.min(100, (p.val / p.limit) * 100)}%` }}
+                                    ></div>
                                 </div>
-                                <span className="text-[10px] font-black text-gray-400">LIMIT: {formatYen(p.limit)}</span>
-                            </div>
-                            <div className="w-full bg-gray-100 h-3 rounded-full overflow-hidden">
-                                <div
-                                    className={`h-full rounded-full transition-all duration-1000 ${p.val > p.limit ? 'bg-red-500' : `bg-${p.color}-500`}`}
-                                    style={{ width: `${Math.min(100, (p.val / p.limit) * 100)}%` }}
-                                ></div>
-                            </div>
-                            {p.val > p.limit && <p className="text-[10px] text-red-500 font-bold mt-2">⚠️ 年間上限を超過しています</p>}
+                            ) : (
+                                // 上限なしの場合: 単なるアクセントバー
+                                <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-slate-400 w-1/3 rounded-full"></div>
+                                </div>
+                            )}
+
+                            {p.limit && p.val > p.limit && <p className="text-[9px] text-red-500 font-bold mt-2">⚠️ 年間上限を超過</p>}
                         </div>
                     </div>
                 ))}
@@ -263,15 +301,18 @@ export default function InvestmentPage() {
                                     <button onClick={() => handleDelete(i.id)} className="p-2 text-gray-400 hover:text-red-600"><Icons.Trash /></button>
                                 </div>
                                 <div className="flex items-center gap-4 mb-4">
-                                    <div className={`w-3 h-12 rounded-full ${style.color}`}></div>
+                                    <div className={`w-2 h-10 rounded-full ${style.color}`}></div>
                                     <div>
                                         <h3 className="font-bold text-lg text-gray-900">{i.name}</h3>
-                                        <span className={`text-[10px] font-black uppercase px-2 py-1 rounded bg-gray-100 text-gray-500`}>{style.label}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded bg-gray-100 text-gray-500`}>{style.label}</span>
+                                            {i.institution && <span className="text-[10px] text-gray-400 font-bold">@ {i.institution}</span>}
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="flex justify-between items-end">
+                                <div className="flex justify-between items-end border-t border-gray-50 pt-3">
                                     <div className="text-2xl font-black text-gray-900 font-mono">{formatYen(i.monthlyAmount)}<span className="text-xs text-gray-400 font-bold ml-1">/月</span></div>
-                                    {i.bonusAmount > 0 && <div className="text-xs font-bold text-gray-400">ボーナス: +{formatYen(i.bonusAmount)}</div>}
+                                    {i.bonusAmount > 0 && <div className="text-xs font-bold text-indigo-500 bg-indigo-50 px-2 py-1 rounded-lg">ボーナス +{formatYen(i.bonusAmount)}</div>}
                                 </div>
                             </div>
                         );

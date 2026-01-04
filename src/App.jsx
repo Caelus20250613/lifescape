@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './contexts/AuthHelpers';
 import Navbar from './components/layout/Navbar';
 import MobileNavbar from './components/layout/MobileNavbar'; // スマホ用メニューのインポート
 
@@ -15,6 +16,8 @@ import ChatPage from './pages/ChatPage';
 import LoginPage from './pages/LoginPage';
 import HelpPage from './pages/HelpPage';
 import InvestmentPage from './pages/InvestmentPage';
+
+import PropertiesPage from './pages/PropertiesPage';
 
 function PrivateRoute({ children }) {
   const { currentUser } = useAuth();
@@ -54,6 +57,13 @@ function AppContent() {
           <Route path="/assets" element={
             <PrivateRoute>
               <AssetPage />
+            </PrivateRoute>
+          } />
+
+          {/* 不動産管理 [NEW] */}
+          <Route path="/properties" element={
+            <PrivateRoute>
+              <PropertiesPage />
             </PrivateRoute>
           } />
 

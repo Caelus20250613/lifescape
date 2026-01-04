@@ -51,7 +51,7 @@ export const geminiService = {
           "brokerName": "証券会社名",
           "assets": [{ 
             "type": "日本株|米国株|投資信託|預金|不動産|貴金属|暗号資産|その他", 
-            "accountType": "特定口座|新NISA (つみたて)|新NISA (成長枠)|旧NISA|iDeCo|一般口座",
+            "accountType": "特定口座|新NISA (つみたて)|新NISA (成長枠)|旧NISA|iDeCo|小規模企業共済|一般口座",
             "name": "銘柄名", 
             "code": "銘柄コード", 
             "amount": 数値
@@ -76,7 +76,8 @@ export const geminiService = {
         try {
             const chat = genAI.getGenerativeModel({ model: "gemini-1.5-flash", systemInstruction: sysInst }).startChat({ history: history || [] });
             return (await (await chat.sendMessage(userMessage)).response).text();
-        } catch (e) {
+        } catch (error) {
+            console.warn(error);
             const chat = genAI.getGenerativeModel({ model: "gemini-pro" }).startChat({ history: [] });
             return (await (await chat.sendMessage(userMessage + `\n(背景: ${context})`)).response).text();
         }

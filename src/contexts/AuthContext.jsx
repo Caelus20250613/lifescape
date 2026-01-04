@@ -1,9 +1,9 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
-import { auth } from "../firebase";
+import { useEffect, useState, useContext } from 'react'; // 1. useContext を追加
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { auth } from '../firebase';
+import { AuthContext } from './AuthHelpers';
 
-const AuthContext = createContext();
-
+// 2. この useAuth フックを追加して export します
 export function useAuth() {
     return useContext(AuthContext);
 }

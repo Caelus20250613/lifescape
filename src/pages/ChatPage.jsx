@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { geminiService } from '../services/geminiService';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthHelpers';
 import { db } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
