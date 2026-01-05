@@ -296,9 +296,14 @@ export default function AssetPage() {
                     const val = Number(asset.amount || 0);
                     const assetType = asset.type || 'その他';
                     const name = asset.name || "";
+
+                    const isForeign = ['米国株', '外国株', 'ETF', '外貨預金', '外貨建てMMF'].includes(assetType);
+                    // 外貨の場合は円換算する。それ以外はそのまま
+                    const convertedVal = isForeign ? convertToJPY(val, asset.currency, rates) : val;
+
                     if (!typeMap[assetType]) typeMap[assetType] = 0;
-                    typeMap[assetType] += val;
-                    total += val;
+                    typeMap[assetType] += convertedVal;
+                    total += convertedVal;
 
                     // 安全資産判定 (円預金、国債など)
                     // 名称も考慮して判定 (LifePlanPageと同期)
@@ -316,8 +321,7 @@ export default function AssetPage() {
                         lowerType.includes('貴金属') || lowerName.includes('金') || lowerName.includes('ゴールド');
 
                     if (!isCash && !isTangible) {
-                        const isForeign = ['米国株', '外国株', 'ETF', '外貨預金', '外貨建てMMF'].includes(assetType);
-                        risk += isForeign ? convertToJPY(val, asset.currency, rates) : val;
+                        risk += convertedVal;
                     }
                 });
             }
@@ -339,7 +343,7 @@ export default function AssetPage() {
         })).filter(d => d.value > 0);
 
         return { chartData: chart, totalAssets: total, riskAssets: risk };
-    }, [portfolios]);
+    }, [portfolios, rates]);
 
     const getAccountTypeBadge = (accType) => {
         if (!accType) return null;
@@ -442,7 +446,15 @@ export default function AssetPage() {
                     ) : (
                         portfolios.map(pf => {
                             const isExpanded = expandedId === pf.id;
-                            const total = pf.total_valuation || (pf.assets ? pf.assets.reduce((s, a) => s + Number(a.amount || 0), 0) : 0);
+
+                            // ポートフォリオ自体の合計額も、外貨が含まれる場合はリアルタイムで円換算して表示する
+                            // pf.total_valuation はDB保存値だが、レート変動や通貨未対応の可能性があるため再計算推奨
+                            const recalculatedTotal = pf.assets ? pf.assets.reduce((sum, asset) => {
+                                const isForeign = ['米国株', '外国株', 'ETF', '外貨預金', '外貨建てMMF'].includes(asset.type);
+                                const val = Number(asset.amount || 0);
+                                return sum + (isForeign ? convertToJPY(val, asset.currency, rates) : val);
+                            }, 0) : 0;
+
                             const assetCount = pf.assets ? pf.assets.length : 0;
 
                             return (
@@ -465,7 +477,7 @@ export default function AssetPage() {
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-4">
-                                            <span className="text-xl font-black text-gray-900">{formatYen(total)}</span>
+                                            <span className="text-xl font-black text-gray-900">{formatYen(recalculatedTotal)}</span>
                                             <div className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
                                                 <Icons.ChevronDown />
                                             </div>
@@ -498,6 +510,12 @@ export default function AssetPage() {
                                                             const badgeText = isSafe ? '安全' : (isTangible ? '実物' : 'リスク');
                                                             const badgeColor = isSafe ? 'bg-emerald-50 text-emerald-500' : (isTangible ? 'bg-amber-50 text-amber-500' : 'bg-indigo-50 text-indigo-500');
 
+                                                            // 外貨の場合は円換算値を計算
+                                                            const isForeign = ['米国株', '外国株', 'ETF', '外貨預金', '外貨建てMMF'].includes(asset.type);
+                                                            const displayVal = isForeign
+                                                                ? convertToJPY(Number(asset.amount || 0), asset.currency, rates)
+                                                                : Number(asset.amount || 0);
+
                                                             return (
                                                                 <tr key={idx} className="hover:bg-white transition-colors">
                                                                     <td className="px-5 py-3 text-[10px] font-bold text-gray-400 uppercase">
@@ -513,7 +531,14 @@ export default function AssetPage() {
                                                                         {asset.name || '(名称なし)'}
                                                                         {asset.code && <span className="text-gray-300 ml-1 text-[10px] font-mono">({asset.code})</span>}
                                                                     </td>
-                                                                    <td className="px-5 py-3 text-sm font-mono font-bold text-right">{formatYen(asset.amount)}</td>
+                                                                    <td className="px-5 py-3 text-sm font-mono font-bold text-right">
+                                                                        {formatYen(displayVal)}
+                                                                        {isForeign && (
+                                                                            <div className="text-[10px] text-gray-400 font-medium">
+                                                                                {(Number(asset.amount || 0)).toLocaleString()} {asset.currency}
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
                                                                 </tr>
                                                             );
                                                         })}
