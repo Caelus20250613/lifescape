@@ -18,6 +18,12 @@ export const fetchStockPrice = async (code) => {
         const response = await fetch(url);
         const data = await response.json();
 
+        // API制限（秒間回数制限など）のチェック
+        if (data["Note"]) {
+            console.warn("API Rate Limit:", data["Note"]);
+            throw new Error("APIの利用制限回数を超えました。しばらく待ってから再度お試しください。");
+        }
+
         const quote = data["Global Quote"];
         if (quote && quote["05. price"]) {
             return Number(quote["05. price"]);
@@ -27,6 +33,6 @@ export const fetchStockPrice = async (code) => {
         }
     } catch (error) {
         console.error("Stock fetch error:", error);
-        return null;
+        throw error; // 上位にエラーを投げて詳細を表示させる
     }
 };

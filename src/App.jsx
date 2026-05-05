@@ -8,7 +8,7 @@ import GlobalErrorBoundary from './components/common/GlobalErrorBoundary'; // �
 import { Toaster } from 'sonner'; // トースト通知
 
 import Dashboard from './pages/Dashboard';
-import PortfolioPage from './pages/PortfolioPage';
+// import PortfolioPage from './pages/PortfolioPage'; // Deprecated
 import AssetPage from './pages/AssetPage';
 import LoansPage from './pages/LoansPage';
 import CashFlowPage from './pages/CashFlowPage';
@@ -49,12 +49,8 @@ function AppContent() {
             </PrivateRoute>
           } />
 
-          {/* 既存のポートフォリオページ */}
-          <Route path="/portfolio" element={
-            <PrivateRoute>
-              <PortfolioPage />
-            </PrivateRoute>
-          } />
+          {/* Old Portfolio Route -> Redirect to Assets */}
+          <Route path="/portfolio" element={<Navigate to="/assets" replace />} />
 
           {/* 資産管理 */}
           <Route path="/assets" element={

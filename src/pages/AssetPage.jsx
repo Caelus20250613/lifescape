@@ -10,6 +10,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import { geminiService } from '../services/geminiService';
 import { useRef } from 'react';
 import { useExchangeRates, convertToJPY, SUPPORTED_CURRENCIES } from '../hooks/useExchangeRates';
+import { fetchStockPrice } from '../services/stockService';
 
 const ACCOUNT_TYPES = ['特定口座', '新NISA (つみたて)', '新NISA (成長枠)', '旧NISA', 'iDeCo', '小規模企業共済', '一般口座', '銀行口座', 'ウォレット(暗号資産)'];
 
@@ -193,588 +194,644 @@ export default function AssetPage() {
         setEditForm({ ...editForm, assets: newAssets });
     };
 
-    import { toast } from 'sonner';
 
-    // ... imports ...
 
-    export default function AssetPage() {
-        // ... code ...
+    // 保存
+    const handleSavePortfolio = async () => {
+        if (!editForm.brokerName.trim()) {
+            return toast.error("証券会社名を入力してください");
+        }
 
-        // 保存
-        const handleSavePortfolio = async () => {
-            if (!editForm.brokerName.trim()) {
-                return toast.error("証券会社名を入力してください");
+        const validAssets = editForm.assets.filter(a => a.name.trim() !== '');
+        const totalVal = validAssets.reduce((sum, a) => sum + Number(a.amount || 0), 0);
+
+        const portfolioData = {
+            brokerName: editForm.brokerName,
+            owner: editForm.owner,
+            assets: validAssets.map(a => {
+                const isForeign = FOREIGN_ASSET_TYPES.includes(a.type);
+                // amountに外貨額を保存する仕様に合わせる
+                return {
+                    ...a,
+                    amount: isForeign ? Number(a.foreignAmount || 0) : Number(a.amount || 0),
+                    foreignAmount: Number(a.foreignAmount || 0)
+                };
+            }),
+            total_valuation: totalVal,
+            updatedAt: serverTimestamp()
+        };
+
+        try {
+            if (editingId) {
+                await updateDoc(doc(db, 'users', currentUser.uid, 'portfolios', editingId), portfolioData);
+                toast.success("更新しました");
+            } else {
+                await addDoc(collection(db, 'users', currentUser.uid, 'portfolios'), {
+                    ...portfolioData,
+                    createdAt: serverTimestamp()
+                });
+                toast.success("新規登録しました");
             }
+            closeModal();
+            fetchData();
+        } catch (e) {
+            console.error(e);
+            toast.error("保存に失敗しました");
+        }
+    };
 
-            const validAssets = editForm.assets.filter(a => a.name.trim() !== '');
-            const totalVal = validAssets.reduce((sum, a) => sum + Number(a.amount || 0), 0);
+    const handleAnalyzeImage = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
 
-            const portfolioData = {
-                brokerName: editForm.brokerName,
-                owner: editForm.owner,
-                assets: validAssets.map(a => {
-                    const isForeign = FOREIGN_ASSET_TYPES.includes(a.type);
-                    // amountに外貨額を保存する仕様に合わせる
-                    return {
-                        ...a,
-                        amount: isForeign ? Number(a.foreignAmount || 0) : Number(a.amount || 0),
-                        foreignAmount: Number(a.foreignAmount || 0)
-                    };
-                }),
-                total_valuation: totalVal,
-                updatedAt: serverTimestamp()
-            };
+        setAnalyzing(true);
+        toast.info("画像を解析中...");
+        try {
+            const result = await geminiService.analyzeAssetImage(file);
 
-            try {
-                if (editingId) {
-                    await updateDoc(doc(db, 'users', currentUser.uid, 'portfolios', editingId), portfolioData);
-                    toast.success("更新しました");
-                } else {
-                    await addDoc(collection(db, 'users', currentUser.uid, 'portfolios'), {
-                        ...portfolioData,
-                        createdAt: serverTimestamp()
-                    });
-                    toast.success("新規登録しました");
+            if (result.assets && Array.isArray(result.assets)) {
+                const currentAssets = editForm.assets.filter(a => a.name !== '' || a.amount !== '');
+                const newAssets = result.assets.map(a => ({
+                    type: a.type || '投資信託',
+                    accountType: a.accountType || '特定口座',
+                    name: a.name || '',
+                    code: a.code || '',
+                    amount: a.amount || 0
+                }));
+
+                setEditForm(prev => ({
+                    ...prev,
+                    brokerName: prev.brokerName || result.brokerName || '',
+                    assets: [...currentAssets, ...newAssets]
+                }));
+                toast.success(`${newAssets.length}件の銘柄を読み込みました。`);
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error("画像の解析に失敗しました。");
+        } finally {
+            setAnalyzing(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    // ライフプランへ同期
+    const handleSyncToLifePlan = async () => {
+        if (!window.confirm("現在の資産合計を、ライフプランシミュレーションの「現在の資産額」として上書き保存しますか？")) return;
+        setSyncing(true);
+        try {
+            // LifePlanPage側で計算ロジックを持っているので、ここではトリガーのみ、あるいは簡易保存
+            // 実際はLifePlanPageを開いたときに最新のPortfoliosを読みに行くロジック(useEffect)になっているため、
+            // ここでは特に何もしなくてもLifePlanPageに行けば反映されます。
+            // 念のため、現在時刻を更新して「更新があったこと」を記録する
+            const settingsRef = doc(db, 'users', currentUser.uid, 'lifePlan', 'simulationSettings');
+            await setDoc(settingsRef, { syncedAt: serverTimestamp() }, { merge: true });
+
+            toast.success("同期完了！ライフプラン画面をリロードすると最新の資産残高が反映されます。");
+        } catch (e) {
+            console.error(e);
+            toast.error("同期に失敗しました");
+        } finally {
+            setSyncing(false);
+        }
+    };
+
+    const formatYen = (val) => {
+        const num = Number(val);
+        if (isNaN(num)) return '¥0';
+        return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }).format(num);
+    };
+
+    const formatDate = (timestamp) => {
+        if (!timestamp) return '---';
+        if (timestamp.toDate) return timestamp.toDate().toLocaleDateString('ja-JP');
+        return new Date(timestamp).toLocaleDateString('ja-JP');
+    };
+
+    const handleCheckLivePrices = async (e, pf) => {
+        e.stopPropagation();
+        const assetsWithCode = pf.assets ? pf.assets.filter(a => a.code) : [];
+
+        if (assetsWithCode.length === 0) {
+            toast.warning("株価を取得できる銘柄コードが登録されていません");
+            return;
+        }
+
+        toast.info("最新の株価情報を取得中...");
+
+        try {
+            const results = [];
+            for (const asset of assetsWithCode) {
+                const price = await fetchStockPrice(asset.code);
+                if (price !== null) {
+                    const currency = asset.currency || 'JPY';
+                    results.push(`${asset.name} (${asset.code}): ${price.toLocaleString()} ${currency}`);
                 }
-                closeModal();
-                fetchData();
-            } catch (e) {
-                console.error(e);
-                toast.error("保存に失敗しました");
             }
-        };
 
-        const handleAnalyzeImage = async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-
-            setAnalyzing(true);
-            toast.info("画像を解析中...");
-            try {
-                const result = await geminiService.analyzeAssetImage(file);
-
-                if (result.assets && Array.isArray(result.assets)) {
-                    const currentAssets = editForm.assets.filter(a => a.name !== '' || a.amount !== '');
-                    const newAssets = result.assets.map(a => ({
-                        type: a.type || '投資信託',
-                        accountType: a.accountType || '特定口座',
-                        name: a.name || '',
-                        code: a.code || '',
-                        amount: a.amount || 0
-                    }));
-
-                    setEditForm(prev => ({
-                        ...prev,
-                        brokerName: prev.brokerName || result.brokerName || '',
-                        assets: [...currentAssets, ...newAssets]
-                    }));
-                    toast.success(`${newAssets.length}件の銘柄を読み込みました。`);
-                }
-            } catch (error) {
-                console.error(error);
-                toast.error("画像の解析に失敗しました。");
-            } finally {
-                setAnalyzing(false);
-                if (fileInputRef.current) fileInputRef.current.value = '';
+            if (results.length > 0) {
+                toast.success(
+                    <div className="text-xs">
+                        <p className="font-bold mb-1 text-sm">最新株価情報 (単価)</p>
+                        {results.map((r, i) => <div key={i} className="mb-0.5">{r}</div>)}
+                        <p className="mt-2 text-[10px] opacity-80">※保有数が登録されていないため、評価額の自動更新は行われません。</p>
+                    </div>,
+                    { duration: 6000 }
+                );
+            } else {
+                toast.error("有効な価格情報が取得できませんでした。コードが正しいかご確認ください。");
             }
-        };
+        } catch (e) {
+            console.error(e);
+            const msg = e.message || "エラーが発生しました";
+            toast.error(msg);
+        }
+    };
 
-        // ライフプランへ同期
-        const handleSyncToLifePlan = async () => {
-            if (!window.confirm("現在の資産合計を、ライフプランシミュレーションの「現在の資産額」として上書き保存しますか？")) return;
-            setSyncing(true);
-            try {
-                // LifePlanPage側で計算ロジックを持っているので、ここではトリガーのみ、あるいは簡易保存
-                // 実際はLifePlanPageを開いたときに最新のPortfoliosを読みに行くロジック(useEffect)になっているため、
-                // ここでは特に何もしなくてもLifePlanPageに行けば反映されます。
-                // 念のため、現在時刻を更新して「更新があったこと」を記録する
-                const settingsRef = doc(db, 'users', currentUser.uid, 'lifePlan', 'simulationSettings');
-                await setDoc(settingsRef, { syncedAt: serverTimestamp() }, { merge: true });
+    // 全資産をフラット化してグラフ用に集計
+    const { chartData, totalAssets, riskAssets } = useMemo(() => {
+        const typeMap = {};
+        let total = 0;
+        let risk = 0;
 
-                toast.success("同期完了！ライフプラン画面をリロードすると最新の資産残高が反映されます。");
-            } catch (e) {
-                console.error(e);
-                toast.error("同期に失敗しました");
-            } finally {
-                setSyncing(false);
+        portfolios.forEach(pf => {
+            if (pf.assets && Array.isArray(pf.assets)) {
+                pf.assets.forEach(asset => {
+                    const val = Number(asset.amount || 0);
+                    const assetType = asset.type || 'その他';
+                    const name = asset.name || "";
+
+                    const isForeign = FOREIGN_ASSET_TYPES.includes(assetType);
+                    // 外貨の場合は円換算する。それ以外はそのまま
+                    const convertedVal = isForeign ? convertToJPY(val, asset.currency, rates) : val;
+
+                    if (!typeMap[assetType]) typeMap[assetType] = 0;
+                    typeMap[assetType] += convertedVal;
+                    total += convertedVal;
+
+                    // 安全資産判定 (円預金、国債など)
+                    // 名称も考慮して判定 (LifePlanPageと同期)
+                    const lowerName = name.toLowerCase();
+                    const lowerType = assetType.toLowerCase();
+                    const isCash = ['円預金', '預金', '普通預金', '定期預金', '現金', 'cash', '小規模企業共済'].includes(lowerType) ||
+                        lowerName.includes('預金') || lowerName.includes('普通') || lowerName.includes('定期') ||
+                        lowerName.includes('セービング') || lowerName.includes('貯金') || lowerName.includes('当座') ||
+                        lowerName.includes('口座') || lowerName.includes('キャッシュ') || lowerName.includes('cash') ||
+                        lowerName.includes('wise');
+
+                    // リスク資産判定
+                    // 不動産は実物資産として「金融リスク資産」からは除外する
+                    // ※貴金属はリスク資産として集計に含める
+                    const isRealEstate = lowerType.includes('不動産') || lowerName.includes('不動産') || lowerName.includes('自宅');
+
+                    if (!isCash && !isRealEstate) {
+                        risk += convertedVal;
+                    }
+                });
             }
+        });
+
+        const COLORS = {
+            '日本株': '#3B82F6', '米国株': '#10B981', '外国株': '#059669',
+            '投資信託': '#F59E0B', 'ETF': '#D97706', '外貨建てMMF': '#FCD34D',
+            '円預金': '#9CA3AF', '預金': '#9CA3AF', '外貨預金': '#6B7280', '債券': '#6366F1',
+            '不動産': '#8B5CF6', '貴金属': '#FBBF24', '暗号資産': '#EF4444',
+            '小規模企業共済': '#F472B6', '貯蓄型保険': '#EC4899', 'その他': '#CBD5E1'
         };
+        const FALLBACK_COLORS = ['#6366F1', '#EC4899', '#14B8A6', '#64748B'];
 
-        const formatYen = (val) => {
-            const num = Number(val);
-            if (isNaN(num)) return '¥0';
-            return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }).format(num);
-        };
+        const chart = Object.keys(typeMap).map((k, i) => ({
+            name: k,
+            value: typeMap[k],
+            color: COLORS[k] || FALLBACK_COLORS[i % FALLBACK_COLORS.length]
+        })).filter(d => d.value > 0);
 
-        const formatDate = (timestamp) => {
-            if (!timestamp) return '---';
-            if (timestamp.toDate) return timestamp.toDate().toLocaleDateString('ja-JP');
-            return new Date(timestamp).toLocaleDateString('ja-JP');
-        };
+        return { chartData: chart, totalAssets: total, riskAssets: risk };
+    }, [portfolios, rates]);
 
-        // 全資産をフラット化してグラフ用に集計
-        const { chartData, totalAssets, riskAssets } = useMemo(() => {
-            const typeMap = {};
-            let total = 0;
-            let risk = 0;
-
-            portfolios.forEach(pf => {
-                if (pf.assets && Array.isArray(pf.assets)) {
-                    pf.assets.forEach(asset => {
-                        const val = Number(asset.amount || 0);
-                        const assetType = asset.type || 'その他';
-                        const name = asset.name || "";
-
-                        const isForeign = FOREIGN_ASSET_TYPES.includes(assetType);
-                        // 外貨の場合は円換算する。それ以外はそのまま
-                        const convertedVal = isForeign ? convertToJPY(val, asset.currency, rates) : val;
-
-                        if (!typeMap[assetType]) typeMap[assetType] = 0;
-                        typeMap[assetType] += convertedVal;
-                        total += convertedVal;
-
-                        // 安全資産判定 (円預金、国債など)
-                        // 名称も考慮して判定 (LifePlanPageと同期)
-                        const lowerName = name.toLowerCase();
-                        const lowerType = assetType.toLowerCase();
-                        const isCash = ['円預金', '預金', '普通預金', '定期預金', '現金', 'cash', '小規模企業共済'].includes(lowerType) ||
-                            lowerName.includes('預金') || lowerName.includes('普通') || lowerName.includes('定期') ||
-                            lowerName.includes('セービング') || lowerName.includes('貯金') || lowerName.includes('当座') ||
-                            lowerName.includes('口座') || lowerName.includes('キャッシュ') || lowerName.includes('cash') ||
-                            lowerName.includes('wise');
-
-                        // リスク資産判定
-                        // 不動産は実物資産として「金融リスク資産」からは除外する
-                        // ※貴金属はリスク資産として集計に含める
-                        const isRealEstate = lowerType.includes('不動産') || lowerName.includes('不動産') || lowerName.includes('自宅');
-
-                        if (!isCash && !isRealEstate) {
-                            risk += convertedVal;
-                        }
-                    });
-                }
-            });
-
-            const COLORS = {
-                '日本株': '#3B82F6', '米国株': '#10B981', '外国株': '#059669',
-                '投資信託': '#F59E0B', 'ETF': '#D97706', '外貨建てMMF': '#FCD34D',
-                '円預金': '#9CA3AF', '預金': '#9CA3AF', '外貨預金': '#6B7280', '債券': '#6366F1',
-                '不動産': '#8B5CF6', '貴金属': '#FBBF24', '暗号資産': '#EF4444',
-                '小規模企業共済': '#F472B6', '貯蓄型保険': '#EC4899', 'その他': '#CBD5E1'
-            };
-            const FALLBACK_COLORS = ['#6366F1', '#EC4899', '#14B8A6', '#64748B'];
-
-            const chart = Object.keys(typeMap).map((k, i) => ({
-                name: k,
-                value: typeMap[k],
-                color: COLORS[k] || FALLBACK_COLORS[i % FALLBACK_COLORS.length]
-            })).filter(d => d.value > 0);
-
-            return { chartData: chart, totalAssets: total, riskAssets: risk };
-        }, [portfolios, rates]);
-
-        const getAccountTypeBadge = (accType) => {
-            if (!accType) return null;
-            const isNisa = accType.includes('NISA') || accType === 'iDeCo';
-            const colorClass = isNisa ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600';
-            return (
-                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${colorClass} mr-1`}>
-                    {accType.replace(' (つみたて)', '').replace(' (成長枠)', '').replace('口座', '')}
-                </span>
-            );
-        };
-
+    const getAccountTypeBadge = (accType) => {
+        if (!accType) return null;
+        const isNisa = accType.includes('NISA') || accType === 'iDeCo';
+        const colorClass = isNisa ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600';
         return (
-            <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6">
-                <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                    <div>
-                        <h1 className="text-3xl font-black text-gray-900 tracking-tight">資産ポートフォリオ</h1>
-                        <p className="text-sm text-gray-500 mt-1">証券口座ごとの資産状況を管理</p>
-                    </div>
-                    <div className="flex gap-3">
-                        <button
-                            onClick={handleSyncToLifePlan}
-                            disabled={syncing}
-                            className="bg-white text-indigo-600 border border-indigo-200 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-50 transition-all shadow-sm text-sm"
-                        >
-                            <Icons.Sync /> {syncing ? '同期中...' : 'ライフプランへ反映'}
-                        </button>
-                        <button
-                            onClick={openAddModal}
-                            className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 text-sm"
-                        >
-                            <Icons.Plus /> 資産を登録
-                        </button>
-                    </div>
-                </header>
+            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${colorClass} mr-1`}>
+                {accType.replace(' (つみたて)', '').replace(' (成長枠)', '').replace('口座', '')}
+            </span>
+        );
+    };
 
-                {/* サマリーカード */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div className="bg-white p-6 rounded-[24px] shadow-sm border border-gray-100">
-                        <p className="text-xs font-bold text-gray-400 uppercase">総資産評価額</p>
-                        <p className="text-3xl font-black text-gray-900 mt-1">{formatYen(totalAssets)}</p>
-                    </div>
-                    <div className="bg-white p-6 rounded-[24px] shadow-sm border border-gray-100">
-                        <p className="text-xs font-bold text-gray-400 uppercase">リスク資産合計</p>
-                        <p className="text-3xl font-black text-indigo-600 mt-1">{formatYen(riskAssets)}</p>
-                        <p className="text-xs text-gray-400 mt-2">
-                            ポートフォリオ比率: {totalAssets > 0 ? Math.round((riskAssets / totalAssets) * 100) : 0}%
-                        </p>
-                    </div>
-                    <div className="bg-white p-6 rounded-[24px] shadow-sm border border-gray-100">
-                        <p className="text-xs font-bold text-gray-400 uppercase">登録口座数</p>
-                        <p className="text-3xl font-black text-gray-900 mt-1">{portfolios.length} <span className="text-sm font-bold text-gray-400">件</span></p>
-                    </div>
+    return (
+        <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6">
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                <div>
+                    <h1 className="text-3xl font-black text-gray-900 tracking-tight">資産ポートフォリオ</h1>
+                    <p className="text-sm text-gray-500 mt-1">証券口座ごとの資産状況を管理</p>
+                </div>
+                <div className="flex gap-3">
+                    <button
+                        onClick={handleSyncToLifePlan}
+                        disabled={syncing}
+                        className="bg-white text-indigo-600 border border-indigo-200 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-50 transition-all shadow-sm text-sm"
+                    >
+                        <Icons.Sync /> {syncing ? '同期中...' : 'ライフプランへ反映'}
+                    </button>
+                    <button
+                        onClick={openAddModal}
+                        className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 text-sm"
+                    >
+                        <Icons.Plus /> 資産を登録
+                    </button>
+                </div>
+            </header>
+
+            {/* サマリーカード */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="bg-white p-6 rounded-[24px] shadow-sm border border-gray-100">
+                    <p className="text-xs font-bold text-gray-400 uppercase">総資産評価額</p>
+                    <p className="text-3xl font-black text-gray-900 mt-1">{formatYen(totalAssets)}</p>
+                </div>
+                <div className="bg-white p-6 rounded-[24px] shadow-sm border border-gray-100">
+                    <p className="text-xs font-bold text-gray-400 uppercase">リスク資産合計</p>
+                    <p className="text-3xl font-black text-indigo-600 mt-1">{formatYen(riskAssets)}</p>
+                    <p className="text-xs text-gray-400 mt-2">
+                        ポートフォリオ比率: {totalAssets > 0 ? Math.round((riskAssets / totalAssets) * 100) : 0}%
+                    </p>
+                </div>
+                <div className="bg-white p-6 rounded-[24px] shadow-sm border border-gray-100">
+                    <p className="text-xs font-bold text-gray-400 uppercase">登録口座数</p>
+                    <p className="text-3xl font-black text-gray-900 mt-1">{portfolios.length} <span className="text-sm font-bold text-gray-400">件</span></p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* 左側: 円グラフ */}
+                <div className="lg:col-span-1 bg-white p-6 rounded-[32px] shadow-sm border border-gray-100 flex flex-col min-h-[400px]">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">アセットアロケーション</h3>
+                    {chartData.length > 0 ? (
+                        <div className="flex-1 min-h-0">
+                            <ResponsiveContainer width="100%" height={300}>
+                                <PieChart>
+                                    <Pie
+                                        data={chartData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={60}
+                                        outerRadius={100}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                    >
+                                        {chartData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip formatter={(val) => formatYen(val)} />
+                                    <Legend />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="flex-1 flex items-center justify-center text-gray-300 font-bold text-sm">データがありません</div>
+                    )}
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* 左側: 円グラフ */}
-                    <div className="lg:col-span-1 bg-white p-6 rounded-[32px] shadow-sm border border-gray-100 flex flex-col min-h-[400px]">
-                        <h3 className="text-lg font-bold text-gray-800 mb-4">アセットアロケーション</h3>
-                        {chartData.length > 0 ? (
-                            <div className="flex-1 min-h-0">
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <PieChart>
-                                        <Pie
-                                            data={chartData}
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={100}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                        >
-                                            {chartData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.color} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip formatter={(val) => formatYen(val)} />
-                                        <Legend />
-                                    </PieChart>
-                                </ResponsiveContainer>
+                {/* 右側: ポートフォリオリスト */}
+                <div className="lg:col-span-2 space-y-4">
+                    <h3 className="font-bold text-gray-800 mb-2">登録済み口座・資産</h3>
+                    {loading ? (
+                        <div className="text-center py-10 text-gray-400">読み込み中...</div>
+                    ) : portfolios.length === 0 ? (
+                        <div className="bg-white p-12 rounded-[32px] border-2 border-dashed border-gray-100 text-center">
+                            <div className="bg-gray-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-300">
+                                <Icons.Bank />
                             </div>
-                        ) : (
-                            <div className="flex-1 flex items-center justify-center text-gray-300 font-bold text-sm">データがありません</div>
-                        )}
-                    </div>
+                            <p className="text-gray-400 font-bold">登録された資産はありません</p>
+                            <p className="text-xs text-gray-300 mt-2">「資産を登録」ボタンから追加してください</p>
+                        </div>
+                    ) : (
+                        portfolios.map(pf => {
+                            const isExpanded = expandedId === pf.id;
 
-                    {/* 右側: ポートフォリオリスト */}
-                    <div className="lg:col-span-2 space-y-4">
-                        <h3 className="font-bold text-gray-800 mb-2">登録済み口座・資産</h3>
-                        {loading ? (
-                            <div className="text-center py-10 text-gray-400">読み込み中...</div>
-                        ) : portfolios.length === 0 ? (
-                            <div className="bg-white p-12 rounded-[32px] border-2 border-dashed border-gray-100 text-center">
-                                <div className="bg-gray-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-300">
-                                    <Icons.Bank />
-                                </div>
-                                <p className="text-gray-400 font-bold">登録された資産はありません</p>
-                                <p className="text-xs text-gray-300 mt-2">「資産を登録」ボタンから追加してください</p>
-                            </div>
-                        ) : (
-                            portfolios.map(pf => {
-                                const isExpanded = expandedId === pf.id;
+                            // pf.total_valuation はDB保存値だが、レート変動や通貨未対応の可能性があるため再計算推奨
+                            const recalculatedTotal = pf.assets ? pf.assets.reduce((sum, asset) => {
+                                const isForeign = FOREIGN_ASSET_TYPES.includes(asset.type);
+                                const val = Number(asset.amount || 0);
+                                return sum + (isForeign ? convertToJPY(val, asset.currency, rates) : val);
+                            }, 0) : 0;
 
-                                // pf.total_valuation はDB保存値だが、レート変動や通貨未対応の可能性があるため再計算推奨
-                                const recalculatedTotal = pf.assets ? pf.assets.reduce((sum, asset) => {
-                                    const isForeign = FOREIGN_ASSET_TYPES.includes(asset.type);
-                                    const val = Number(asset.amount || 0);
-                                    return sum + (isForeign ? convertToJPY(val, asset.currency, rates) : val);
-                                }, 0) : 0;
+                            const assetCount = pf.assets ? pf.assets.length : 0;
 
-                                const assetCount = pf.assets ? pf.assets.length : 0;
-
-                                return (
-                                    <div key={pf.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                                        {/* ヘッダー */}
-                                        <div
-                                            className="p-5 flex items-center justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
-                                            onClick={() => setExpandedId(isExpanded ? null : pf.id)}
-                                        >
-                                            <div className="flex items-center gap-4">
-                                                <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600">
-                                                    <Icons.Bank />
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <h3 className="font-bold text-gray-900">{pf.brokerName || '(名称なし)'}</h3>
-                                                        {pf.owner && <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{pf.owner}</span>}
-                                                    </div>
-                                                    <p className="text-xs text-gray-400 mt-1">{assetCount}銘柄 • 更新: {formatDate(pf.updatedAt || pf.createdAt)}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-4">
-                                                <span className="text-xl font-black text-gray-900">{formatYen(recalculatedTotal)}</span>
-                                                <div className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
-                                                    <Icons.ChevronDown />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* 展開時 */}
-                                        {isExpanded && (
-                                            <div className="border-t border-gray-100 bg-gray-50/30">
-                                                {pf.assets && pf.assets.length > 0 ? (
-                                                    <table className="w-full">
-                                                        <thead className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                                            <tr>
-                                                                <th className="px-5 py-3 text-left">タイプ</th>
-                                                                <th className="px-5 py-3 text-left">名称</th>
-                                                                <th className="px-5 py-3 text-right">評価額</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody className="divide-y divide-gray-100">
-                                                            {pf.assets.map((asset, idx) => {
-                                                                const lowName = (asset.name || '').toLowerCase();
-                                                                const lowType = (asset.type || '').toLowerCase();
-                                                                const isSafe = ['円預金', '預金', '普通預金', '定期預金', '現金', 'cash', '小規模企業共済'].includes(lowType) ||
-                                                                    lowName.includes('預金') || lowName.includes('普通') || lowName.includes('定期') ||
-                                                                    lowName.includes('セービング') || lowName.includes('貯金') || lowName.includes('当座') ||
-                                                                    lowName.includes('口座') || lowName.includes('キャッシュ') || lowName.includes('cash') || lowName.includes('wise');
-                                                                const isRealEstate = lowType.includes('不動産') || lowName.includes('不動産') || lowName.includes('自宅');
-                                                                // 貴金属はリスク資産として扱うため、ここでのTangible判定からは外す
-                                                                const isTangible = isRealEstate;
-
-                                                                const badgeText = isSafe ? '安全' : (isTangible ? '実物' : 'リスク');
-                                                                const badgeColor = isSafe ? 'bg-emerald-50 text-emerald-500' : (isTangible ? 'bg-amber-50 text-amber-500' : 'bg-indigo-50 text-indigo-500');
-
-                                                                // 外貨の場合は円換算値を計算
-                                                                const isForeign = FOREIGN_ASSET_TYPES.includes(asset.type);
-                                                                const displayVal = isForeign
-                                                                    ? convertToJPY(Number(asset.amount || 0), asset.currency, rates)
-                                                                    : Number(asset.amount || 0);
-
-                                                                return (
-                                                                    <tr key={idx} className="hover:bg-white transition-colors">
-                                                                        <td className="px-5 py-3 text-[10px] font-bold text-gray-400 uppercase">
-                                                                            <div className="flex flex-col gap-1">
-                                                                                <span>{asset.type || '---'}</span>
-                                                                                <span className={`text-[8px] px-1 py-0.5 rounded-sm w-fit ${badgeColor}`}>
-                                                                                    {badgeText}
-                                                                                </span>
-                                                                            </div>
-                                                                        </td>
-                                                                        <td className="px-5 py-3 text-sm text-gray-900 font-bold">
-                                                                            {getAccountTypeBadge(asset.accountType)}
-                                                                            {asset.name || '(名称なし)'}
-                                                                            {asset.code && <span className="text-gray-300 ml-1 text-[10px] font-mono">({asset.code})</span>}
-                                                                        </td>
-                                                                        <td className="px-5 py-3 text-sm font-mono font-bold text-right">
-                                                                            {formatYen(displayVal)}
-                                                                            {isForeign && (
-                                                                                <div className="text-[10px] text-gray-400 font-medium">
-                                                                                    {(Number(asset.amount || 0)).toLocaleString()} {asset.currency}
-                                                                                </div>
-                                                                            )}
-                                                                        </td>
-                                                                    </tr>
-                                                                );
-                                                            })}
-                                                        </tbody>
-                                                    </table>
-                                                ) : (
-                                                    <p className="text-sm text-gray-400 italic text-center py-6">銘柄データがありません</p>
-                                                )}
-                                                <div className="px-5 py-4 border-t border-gray-100 flex justify-between items-center">
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); openEditModal(pf); }}
-                                                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-                                                    >
-                                                        <Icons.Edit /> 編集する
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDelete(pf.id); }}
-                                                        className="text-xs font-bold text-red-400 hover:text-red-600 flex items-center gap-1"
-                                                    >
-                                                        <Icons.Trash /> 削除
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })
-                        )}
-                    </div>
-                </div>
-
-                {/* 編集モーダル */}
-                {showModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                        <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={closeModal}></div>
-                        <div className="bg-white w-full max-w-3xl rounded-[32px] shadow-2xl relative z-10 overflow-hidden max-h-[90vh] flex flex-col">
-                            {/* ヘッダー */}
-                            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                                <div>
-                                    <h2 className="text-xl font-black text-gray-900">{editingId ? '資産詳細の編集' : '新規資産の登録'}</h2>
-                                    <p className="text-xs text-gray-400 mt-1">口座・場所ごとに資産を管理</p>
-                                </div>
-                                <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 transition-colors">
-                                    <Icons.Close />
-                                </button>
-                            </div>
-
-                            {/* フォーム本体 */}
-                            <div className="p-6 overflow-y-auto flex-1">
-                                <div className="grid grid-cols-2 gap-4 mb-6">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">管理場所 / 金融機関名</label>
-                                        <input
-                                            type="text"
-                                            value={editForm.brokerName}
-                                            onChange={(e) => setEditForm({ ...editForm, brokerName: e.target.value })}
-                                            className="w-full bg-gray-50 border-none rounded-xl p-4 font-bold text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                            placeholder="例: SBI証券, 三井住友銀行, 自宅金庫"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">所有者</label>
-                                        <select
-                                            value={editForm.owner}
-                                            onChange={(e) => setEditForm({ ...editForm, owner: e.target.value })}
-                                            className="w-full bg-gray-50 border-none rounded-xl p-4 font-bold text-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
-                                        >
-                                            {members.map(m => <option key={m} value={m}>{m}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
-
-                                {/* AI 読み取り */}
-                                {!editingId && (
-                                    <div className="mb-6 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="bg-white p-2.5 rounded-xl shadow-sm border border-indigo-50 text-indigo-600">
-                                                <Icons.Camera />
+                            return (
+                                <div key={pf.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                                    {/* ヘッダー */}
+                                    <div
+                                        className="p-5 flex items-center justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
+                                        onClick={() => setExpandedId(isExpanded ? null : pf.id)}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600">
+                                                <Icons.Bank />
                                             </div>
                                             <div>
-                                                <p className="text-xs font-black text-indigo-900">AI スキャン入力</p>
-                                                <p className="text-[10px] text-indigo-500 mt-0.5">スクショから資産を自動読み込み</p>
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="font-bold text-gray-900">{pf.brokerName || '(名称なし)'}</h3>
+                                                    {pf.owner && <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{pf.owner}</span>}
+                                                </div>
+                                                <p className="text-xs text-gray-400 mt-1">{assetCount}銘柄 • 更新: {formatDate(pf.updatedAt || pf.createdAt)}</p>
                                             </div>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => fileInputRef.current?.click()}
-                                            disabled={analyzing}
-                                            className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-[11px] font-black hover:bg-indigo-700 transition-all flex items-center gap-2 disabled:bg-indigo-300"
-                                        >
-                                            {analyzing ? <Icons.Loading /> : <Icons.Camera />}
-                                            {analyzing ? '解析中...' : 'スクショを選択'}
-                                        </button>
-                                        <input type="file" ref={fileInputRef} onChange={handleAnalyzeImage} accept="image/*" className="hidden" />
-                                    </div>
-                                )}
-
-                                {/* 資産リスト */}
-                                <div className="mb-4">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">保有資産一覧</label>
-                                        <button type="button" onClick={addAssetRow} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                                            <Icons.Plus /> 行を追加
-                                        </button>
-                                    </div>
-
-                                    <div className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-100">
-                                        <table className="w-full">
-                                            <thead className="bg-gray-100 text-[9px] font-black text-gray-400 uppercase">
-                                                <tr>
-                                                    <th className="px-3 py-2 text-left w-28">タイプ</th>
-                                                    <th className="px-3 py-2 text-left w-24">口座区分</th>
-                                                    <th className="px-3 py-2 text-left">資産名/銘柄</th>
-                                                    <th className="px-3 py-2 text-left w-32">外貨</th>
-                                                    <th className="px-3 py-2 text-right w-28">評価額(円)</th>
-                                                    <th className="px-2 py-2 w-10"></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {editForm.assets.map((asset, idx) => (
-                                                    <tr key={idx} className="bg-white">
-                                                        <td className="px-3 py-2">
-                                                            <select
-                                                                value={asset.type}
-                                                                onChange={(e) => updateAssetRow(idx, 'type', e.target.value)}
-                                                                className="w-full text-xs border-none bg-transparent p-1 outline-none font-bold"
-                                                            >
-                                                                {ASSET_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                                            </select>
-                                                        </td>
-                                                        <td className="px-3 py-2 border-l border-gray-50">
-                                                            <select
-                                                                value={asset.accountType}
-                                                                onChange={(e) => updateAssetRow(idx, 'accountType', e.target.value)}
-                                                                className="w-full text-xs border-none bg-transparent p-1 outline-none font-medium text-gray-600"
-                                                            >
-                                                                {ACCOUNT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                                                            </select>
-                                                        </td>
-                                                        <td className="px-3 py-2 border-l border-gray-50">
-                                                            <input
-                                                                type="text"
-                                                                value={asset.name}
-                                                                onChange={(e) => updateAssetRow(idx, 'name', e.target.value)}
-                                                                className="w-full text-sm border-none bg-transparent p-1 outline-none font-bold"
-                                                                placeholder="銘柄名..."
-                                                            />
-                                                        </td>
-                                                        <td className="px-2 py-2 border-l border-gray-50">
-                                                            {FOREIGN_ASSET_TYPES.includes(asset.type) ? (
-                                                                <div className="flex gap-1 items-center">
-                                                                    <select
-                                                                        value={asset.currency || 'USD'}
-                                                                        onChange={(e) => updateAssetRow(idx, 'currency', e.target.value)}
-                                                                        className="text-[10px] border-none bg-indigo-50 rounded p-1 outline-none font-bold text-indigo-700 w-14"
-                                                                    >
-                                                                        {SUPPORTED_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                                                                    </select>
-                                                                    <input
-                                                                        type="number"
-                                                                        value={asset.foreignAmount || ''}
-                                                                        onChange={(e) => updateAssetRow(idx, 'foreignAmount', e.target.value)}
-                                                                        className="w-16 text-xs text-right border-none bg-transparent p-1 outline-none font-bold font-mono"
-                                                                        placeholder="0"
-                                                                    />
-                                                                </div>
-                                                            ) : (
-                                                                <span className="text-[10px] text-gray-300 px-1">---</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-3 py-2 border-l border-gray-50">
-                                                            <input
-                                                                type="number"
-                                                                value={asset.amount}
-                                                                onChange={(e) => updateAssetRow(idx, 'amount', e.target.value)}
-                                                                className="w-full text-sm text-right border-none bg-transparent p-1 outline-none font-bold font-mono"
-                                                                placeholder="0"
-                                                                readOnly={FOREIGN_ASSET_TYPES.includes(asset.type)}
-                                                            />
-                                                        </td>
-                                                        <td className="px-2 py-2 text-center border-l border-gray-50">
-                                                            <button type="button" onClick={() => removeAssetRow(idx)} className="text-gray-300 hover:text-red-500 transition-colors">
-                                                                <Icons.Trash />
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                        {editForm.assets.length === 0 && (
-                                            <div className="p-6 text-center text-gray-300 text-sm">
-                                                「行を追加」から資産を登録してください
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-xl font-black text-gray-900">{formatYen(recalculatedTotal)}</span>
+                                            <div className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                                                <Icons.ChevronDown />
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
+
+                                    {/* 展開時 */}
+                                    {isExpanded && (
+                                        <div className="border-t border-gray-100 bg-gray-50/30">
+                                            {pf.assets && pf.assets.length > 0 ? (
+                                                <table className="w-full">
+                                                    <thead className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                                        <tr>
+                                                            <th className="px-5 py-3 text-left">タイプ</th>
+                                                            <th className="px-5 py-3 text-left">名称</th>
+                                                            <th className="px-5 py-3 text-right">評価額</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {pf.assets.map((asset, idx) => {
+                                                            const lowName = (asset.name || '').toLowerCase();
+                                                            const lowType = (asset.type || '').toLowerCase();
+                                                            const isSafe = ['円預金', '預金', '普通預金', '定期預金', '現金', 'cash', '小規模企業共済'].includes(lowType) ||
+                                                                lowName.includes('預金') || lowName.includes('普通') || lowName.includes('定期') ||
+                                                                lowName.includes('セービング') || lowName.includes('貯金') || lowName.includes('当座') ||
+                                                                lowName.includes('口座') || lowName.includes('キャッシュ') || lowName.includes('cash') || lowName.includes('wise');
+                                                            const isRealEstate = lowType.includes('不動産') || lowName.includes('不動産') || lowName.includes('自宅');
+                                                            // 貴金属はリスク資産として扱うため、ここでのTangible判定からは外す
+                                                            const isTangible = isRealEstate;
+
+                                                            const badgeText = isSafe ? '安全' : (isTangible ? '実物' : 'リスク');
+                                                            const badgeColor = isSafe ? 'bg-emerald-50 text-emerald-500' : (isTangible ? 'bg-amber-50 text-amber-500' : 'bg-indigo-50 text-indigo-500');
+
+                                                            // 外貨の場合は円換算値を計算
+                                                            const isForeign = FOREIGN_ASSET_TYPES.includes(asset.type);
+                                                            const displayVal = isForeign
+                                                                ? convertToJPY(Number(asset.amount || 0), asset.currency, rates)
+                                                                : Number(asset.amount || 0);
+
+                                                            return (
+                                                                <tr key={idx} className="hover:bg-white transition-colors">
+                                                                    <td className="px-5 py-3 text-[10px] font-bold text-gray-400 uppercase">
+                                                                        <div className="flex flex-col gap-1">
+                                                                            <span>{asset.type || '---'}</span>
+                                                                            <span className={`text-[8px] px-1 py-0.5 rounded-sm w-fit ${badgeColor}`}>
+                                                                                {badgeText}
+                                                                            </span>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-5 py-3 text-sm text-gray-900 font-bold">
+                                                                        {getAccountTypeBadge(asset.accountType)}
+                                                                        {asset.name || '(名称なし)'}
+                                                                        {asset.code && <span className="text-gray-300 ml-1 text-[10px] font-mono">({asset.code})</span>}
+                                                                    </td>
+                                                                    <td className="px-5 py-3 text-sm font-mono font-bold text-right">
+                                                                        {formatYen(displayVal)}
+                                                                        {isForeign && (
+                                                                            <div className="text-[10px] text-gray-400 font-medium">
+                                                                                {(Number(asset.amount || 0)).toLocaleString()} {asset.currency}
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            ) : (
+                                                <p className="text-sm text-gray-400 italic text-center py-6">銘柄データがありません</p>
+                                            )}
+                                            <div className="px-5 py-4 border-t border-gray-100 flex justify-end items-center gap-3">
+                                                {pf.assets && pf.assets.some(a => a.code) && (
+                                                    <button
+                                                        onClick={(e) => handleCheckLivePrices(e, pf)}
+                                                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                                        </svg>
+                                                        最新株価確認
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); openEditModal(pf); }}
+                                                    className="text-xs font-bold text-gray-500 hover:text-gray-900 flex items-center gap-1 px-3 py-1.5"
+                                                >
+                                                    <Icons.Edit /> 編集する
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleDelete(pf.id); }}
+                                                    className="text-xs font-bold text-red-400 hover:text-red-600 flex items-center gap-1"
+                                                >
+                                                    <Icons.Trash /> 削除
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
+
+            {/* 編集モーダル */}
+            {showModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={closeModal}></div>
+                    <div className="bg-white w-full max-w-3xl rounded-[32px] shadow-2xl relative z-10 overflow-hidden max-h-[90vh] flex flex-col">
+                        {/* ヘッダー */}
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <div>
+                                <h2 className="text-xl font-black text-gray-900">{editingId ? '資産詳細の編集' : '新規資産の登録'}</h2>
+                                <p className="text-xs text-gray-400 mt-1">口座・場所ごとに資産を管理</p>
+                            </div>
+                            <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 transition-colors">
+                                <Icons.Close />
+                            </button>
+                        </div>
+
+                        {/* フォーム本体 */}
+                        <div className="p-6 overflow-y-auto flex-1">
+                            <div className="grid grid-cols-2 gap-4 mb-6">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">管理場所 / 金融機関名</label>
+                                    <input
+                                        type="text"
+                                        value={editForm.brokerName}
+                                        onChange={(e) => setEditForm({ ...editForm, brokerName: e.target.value })}
+                                        className="w-full bg-gray-50 border-none rounded-xl p-4 font-bold text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="例: SBI証券, 三井住友銀行, 自宅金庫"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">所有者</label>
+                                    <select
+                                        value={editForm.owner}
+                                        onChange={(e) => setEditForm({ ...editForm, owner: e.target.value })}
+                                        className="w-full bg-gray-50 border-none rounded-xl p-4 font-bold text-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
+                                    >
+                                        {members.map(m => <option key={m} value={m}>{m}</option>)}
+                                    </select>
                                 </div>
                             </div>
 
-                            {/* フッター */}
-                            <div className="p-6 border-t border-gray-100 flex gap-4 bg-gray-50/50">
-                                <button type="button" onClick={closeModal} className="flex-1 py-4 rounded-xl font-bold text-gray-500 bg-white border border-gray-200 hover:bg-gray-50 transition-colors">キャンセル</button>
-                                <button onClick={handleSavePortfolio} className="flex-[2] py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all font-mono tracking-wider">
-                                    {editingId ? '更新する' : '登録する'}
-                                </button>
+                            {/* AI 読み取り */}
+                            {!editingId && (
+                                <div className="mb-6 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-white p-2.5 rounded-xl shadow-sm border border-indigo-50 text-indigo-600">
+                                            <Icons.Camera />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-black text-indigo-900">AI スキャン入力</p>
+                                            <p className="text-[10px] text-indigo-500 mt-0.5">スクショから資産を自動読み込み</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={analyzing}
+                                        className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-[11px] font-black hover:bg-indigo-700 transition-all flex items-center gap-2 disabled:bg-indigo-300"
+                                    >
+                                        {analyzing ? <Icons.Loading /> : <Icons.Camera />}
+                                        {analyzing ? '解析中...' : 'スクショを選択'}
+                                    </button>
+                                    <input type="file" ref={fileInputRef} onChange={handleAnalyzeImage} accept="image/*" className="hidden" />
+                                </div>
+                            )}
+
+                            {/* 資産リスト */}
+                            <div className="mb-4">
+                                <div className="flex justify-between items-center mb-3">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">保有資産一覧</label>
+                                    <button type="button" onClick={addAssetRow} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                                        <Icons.Plus /> 行を追加
+                                    </button>
+                                </div>
+
+                                <div className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-100">
+                                    <table className="w-full">
+                                        <thead className="bg-gray-100 text-[9px] font-black text-gray-400 uppercase">
+                                            <tr>
+                                                <th className="px-3 py-2 text-left w-28">タイプ</th>
+                                                <th className="px-3 py-2 text-left w-24">口座区分</th>
+                                                <th className="px-3 py-2 text-left">資産名/銘柄</th>
+                                                <th className="px-3 py-2 text-left w-20">コード</th>
+                                                <th className="px-3 py-2 text-left w-32">外貨</th>
+                                                <th className="px-3 py-2 text-right w-28">評価額(円)</th>
+                                                <th className="px-2 py-2 w-10"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {editForm.assets.map((asset, idx) => (
+                                                <tr key={idx} className="bg-white">
+                                                    <td className="px-3 py-2">
+                                                        <select
+                                                            value={asset.type}
+                                                            onChange={(e) => updateAssetRow(idx, 'type', e.target.value)}
+                                                            className="w-full text-xs border-none bg-transparent p-1 outline-none font-bold"
+                                                        >
+                                                            {ASSET_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-3 py-2 border-l border-gray-50">
+                                                        <select
+                                                            value={asset.accountType}
+                                                            onChange={(e) => updateAssetRow(idx, 'accountType', e.target.value)}
+                                                            className="w-full text-xs border-none bg-transparent p-1 outline-none font-medium text-gray-600"
+                                                        >
+                                                            {ACCOUNT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-3 py-2 border-l border-gray-50">
+                                                        <input
+                                                            type="text"
+                                                            value={asset.name}
+                                                            onChange={(e) => updateAssetRow(idx, 'name', e.target.value)}
+                                                            className="w-full text-sm border-none bg-transparent p-1 outline-none font-bold"
+                                                            placeholder="銘柄名..."
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2 border-l border-gray-50">
+                                                        <input
+                                                            type="text"
+                                                            value={asset.code || ''}
+                                                            onChange={(e) => updateAssetRow(idx, 'code', e.target.value)}
+                                                            className="w-full text-xs border-none bg-transparent p-1 outline-none font-mono text-gray-500"
+                                                            placeholder="7203"
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2 border-l border-gray-50">
+                                                        {FOREIGN_ASSET_TYPES.includes(asset.type) ? (
+                                                            <div className="flex gap-1 items-center">
+                                                                <select
+                                                                    value={asset.currency || 'USD'}
+                                                                    onChange={(e) => updateAssetRow(idx, 'currency', e.target.value)}
+                                                                    className="text-[10px] border-none bg-indigo-50 rounded p-1 outline-none font-bold text-indigo-700 w-14"
+                                                                >
+                                                                    {SUPPORTED_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                                </select>
+                                                                <input
+                                                                    type="number"
+                                                                    value={asset.foreignAmount || ''}
+                                                                    onChange={(e) => updateAssetRow(idx, 'foreignAmount', e.target.value)}
+                                                                    className="w-16 text-xs text-right border-none bg-transparent p-1 outline-none font-bold font-mono"
+                                                                    placeholder="0"
+                                                                />
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[10px] text-gray-300 px-1">---</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 border-l border-gray-50">
+                                                        <input
+                                                            type="number"
+                                                            value={asset.amount}
+                                                            onChange={(e) => updateAssetRow(idx, 'amount', e.target.value)}
+                                                            className="w-full text-sm text-right border-none bg-transparent p-1 outline-none font-bold font-mono"
+                                                            placeholder="0"
+                                                            readOnly={FOREIGN_ASSET_TYPES.includes(asset.type)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-2 py-2 text-center border-l border-gray-50">
+                                                        <button type="button" onClick={() => removeAssetRow(idx)} className="text-gray-300 hover:text-red-500 transition-colors">
+                                                            <Icons.Trash />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                    {editForm.assets.length === 0 && (
+                                        <div className="p-6 text-center text-gray-300 text-sm">
+                                            「行を追加」から資産を登録してください
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
+
+                        {/* フッター */}
+                        <div className="p-6 border-t border-gray-100 flex gap-4 bg-gray-50/50">
+                            <button type="button" onClick={closeModal} className="flex-1 py-4 rounded-xl font-bold text-gray-500 bg-white border border-gray-200 hover:bg-gray-50 transition-colors">キャンセル</button>
+                            <button onClick={handleSavePortfolio} className="flex-[2] py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all font-mono tracking-wider">
+                                {editingId ? '更新する' : '登録する'}
+                            </button>
+                        </div>
                     </div>
-                )}
-            </div>
-        );
-    }
+                </div>
+            )}
+        </div>
+    );
+}
