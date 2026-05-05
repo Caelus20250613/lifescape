@@ -4,6 +4,8 @@ import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './contexts/AuthHelpers';
 import Navbar from './components/layout/Navbar';
 import MobileNavbar from './components/layout/MobileNavbar'; // スマホ用メニューのインポート
+import GlobalErrorBoundary from './components/common/GlobalErrorBoundary'; // エラーバウンダリ
+import { Toaster } from 'sonner'; // トースト通知
 
 import Dashboard from './pages/Dashboard';
 import PortfolioPage from './pages/PortfolioPage';
@@ -28,6 +30,7 @@ function PrivateRoute({ children }) {
 function AppContent() {
   return (
     <>
+      <Toaster position="top-center" richColors />
       {/* PC/タブレット用の上部ナビゲーション */}
       <Navbar />
 
@@ -126,11 +129,13 @@ function AppContent() {
 
 function App() {
   return (
-    <Router basename={import.meta.env.BASE_URL}>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </Router>
+    <GlobalErrorBoundary>
+      <Router basename={import.meta.env.BASE_URL}>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </Router>
+    </GlobalErrorBoundary>
   );
 }
 

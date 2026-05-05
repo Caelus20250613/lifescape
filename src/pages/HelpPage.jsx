@@ -1,88 +1,106 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import {
+    Search, Book, LayoutDashboard, Briefcase, Home, Wallet,
+    TrendingUp, Bot, BookOpen, HelpCircle, ChevronDown, ChevronRight,
+    Info, AlertTriangle, CheckCircle2, Lightbulb
+} from 'lucide-react';
 
 const HelpPage = () => {
     const [activeSection, setActiveSection] = useState('overview');
+    const [searchQuery, setSearchQuery] = useState('');
 
-    const sections = [
-        { id: 'overview', title: '概要・はじめに', icon: '📘' },
-        { id: 'dashboard', title: 'ダッシュボード', icon: '📊' },
-        { id: 'portfolio', title: '資産管理', icon: '💼' },
-        { id: 'loans', title: 'ローン管理', icon: '🏠' },
-        { id: 'cashflow', title: '収支管理', icon: '💰' },
-        { id: 'lifeplan', title: 'ライフプラン', icon: '📈' },
-        { id: 'ai', title: 'AIアドバイザー', icon: '🤖' },
-        { id: 'glossary', title: '用語集', icon: '📖' },
-        { id: 'faq', title: 'よくある質問', icon: '❓' },
-    ];
+    // Search functionality
+    const filteredSections = useMemo(() => {
+        if (!searchQuery.trim()) return HELP_SECTIONS;
 
-    const renderContent = () => {
-        switch (activeSection) {
-            case 'overview':
-                return <OverviewSection />;
-            case 'dashboard':
-                return <DashboardSection />;
-            case 'portfolio':
-                return <PortfolioSection />;
-            case 'loans':
-                return <LoansSection />;
-            case 'cashflow':
-                return <CashFlowSection />;
-            case 'lifeplan':
-                return <LifePlanSection />;
-            case 'ai':
-                return <AISection />;
-            case 'glossary':
-                return <GlossarySection />;
-            case 'faq':
-                return <FAQSection />;
-            default:
-                return <OverviewSection />;
+        const lowerQuery = searchQuery.toLowerCase();
+        return HELP_SECTIONS.filter(section => {
+            const matchesTitle = section.title.toLowerCase().includes(lowerQuery);
+            const matchesKeywords = section.keywords && section.keywords.toLowerCase().includes(lowerQuery);
+            return matchesTitle || matchesKeywords;
+        });
+    }, [searchQuery]);
+
+    const handleSearch = (e) => {
+        setSearchQuery(e.target.value);
+        if (activeSection !== 'search_results' && e.target.value) {
+            // Optional: could auto-switch to a search view, but filtering sidebar is cleaner
         }
     };
 
+    const ActiveComponent = useMemo(() => {
+        const section = HELP_SECTIONS.find(s => s.id === activeSection);
+        return section ? section.component : OverviewSection;
+    }, [activeSection]);
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+        <div className="min-h-screen bg-slate-50 relative">
             <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
                 {/* Header */}
                 <div className="text-center mb-10">
-                    <h1 className="text-4xl font-black text-gray-900 mb-3">
-                        📚 ヘルプセンター
+                    <h1 className="text-4xl font-black text-gray-900 mb-4 tracking-tight">
+                        ヘルプセンター
                     </h1>
-                    <p className="text-gray-500 max-w-2xl mx-auto">
-                        FinanceManagerの使い方、各機能の詳細、用語の説明など、お困りの際はこちらをご覧ください。
+                    <p className="text-gray-600 max-w-2xl mx-auto text-lg">
+                        FinanceManagerの使い方や、よくある質問をまとめています。<br />
+                        お探しの情報が見つからない場合は、検索機能をご利用ください。
                     </p>
+
+                    {/* Search Bar */}
+                    <div className="max-w-xl mx-auto mt-8 relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <Search className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <input
+                            id="help-search-input"
+                            type="text"
+                            value={searchQuery}
+                            onChange={handleSearch}
+                            placeholder="キーワードで検索 (例: NISA, ローン, 資産登録)..."
+                            className="block w-full pl-11 pr-4 py-4 rounded-2xl border-0 ring-1 ring-inset ring-gray-200 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-500 shadow-xl sm:text-base leading-6 transition-all"
+                        />
+                    </div>
                 </div>
 
                 <div className="flex flex-col lg:flex-row gap-8">
                     {/* Sidebar Navigation */}
-                    <nav className="lg:w-64 flex-shrink-0">
-                        <div className="bg-white rounded-2xl shadow-lg p-4 sticky top-6">
-                            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-3">
-                                目次
+                    <nav className="lg:w-72 flex-shrink-0">
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sticky top-6 overflow-hidden">
+                            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-4 py-2">
+                                メニュー
                             </h2>
-                            <ul className="space-y-1">
-                                {sections.map(section => (
-                                    <li key={section.id}>
-                                        <button
-                                            onClick={() => setActiveSection(section.id)}
-                                            className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeSection === section.id
-                                                    ? 'bg-blue-600 text-white shadow-md'
-                                                    : 'text-gray-600 hover:bg-gray-100'
-                                                }`}
-                                        >
-                                            <span className="mr-2">{section.icon}</span>
-                                            {section.title}
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
+                            {filteredSections.length > 0 ? (
+                                <ul className="space-y-1">
+                                    {filteredSections.map(section => (
+                                        <li key={section.id}>
+                                            <button
+                                                id={`help-nav-${section.id}`}
+                                                onClick={() => setActiveSection(section.id)}
+                                                className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all group flex items-center gap-3 ${activeSection === section.id
+                                                    ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100'
+                                                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                                    }`}
+                                            >
+                                                <span className={`${activeSection === section.id ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'}`}>
+                                                    {section.icon}
+                                                </span>
+                                                {section.title}
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <div className="text-center py-8 text-gray-500 text-sm">
+                                    <p>一致する項目がありません</p>
+                                </div>
+                            )}
                         </div>
                     </nav>
 
                     {/* Main Content */}
-                    <main className="flex-1">
-                        <div className="bg-white rounded-2xl shadow-lg p-8">
-                            {renderContent()}
+                    <main className="flex-1 min-w-0">
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 min-h-[600px] animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <ActiveComponent />
                         </div>
                     </main>
                 </div>
@@ -91,51 +109,53 @@ const HelpPage = () => {
     );
 };
 
-// ========== Section Components ==========
+// ========== UI Components ==========
 
 const SectionTitle = ({ icon, children }) => (
-    <h2 className="text-2xl font-black text-gray-900 mb-6 flex items-center gap-3">
-        <span className="text-3xl">{icon}</span>
-        {children}
-    </h2>
+    <div className="flex items-center gap-4 mb-8 pb-6 border-b border-gray-100">
+        <div className="p-3 bg-blue-50 rounded-2xl text-blue-600">
+            {React.cloneElement(icon, { size: 32 })}
+        </div>
+        <h2 className="text-3xl font-bold text-gray-900 tracking-tight">
+            {children}
+        </h2>
+    </div>
 );
 
 const SubSection = ({ title, children }) => (
-    <div className="mb-8">
-        <h3 className="text-lg font-bold text-gray-800 mb-3 border-l-4 border-blue-500 pl-3">
+    <div className="mb-10 last:mb-0">
+        <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <div className="w-1.5 h-6 bg-blue-500 rounded-full"></div>
             {title}
         </h3>
-        <div className="text-gray-600 leading-relaxed space-y-3">
+        <div className="text-gray-600 leading-relaxed text-base space-y-4 pl-1">
             {children}
         </div>
     </div>
 );
 
 const InfoBox = ({ type = 'info', children }) => {
-    const styles = {
-        info: 'bg-blue-50 border-blue-200 text-blue-800',
-        warning: 'bg-amber-50 border-amber-200 text-amber-800',
-        success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
-        tip: 'bg-purple-50 border-purple-200 text-purple-800',
+    const config = {
+        info: { style: 'bg-blue-50 border-blue-100 text-blue-800', icon: Info },
+        warning: { style: 'bg-amber-50 border-amber-100 text-amber-800', icon: AlertTriangle },
+        success: { style: 'bg-emerald-50 border-emerald-100 text-emerald-800', icon: CheckCircle2 },
+        tip: { style: 'bg-purple-50 border-purple-100 text-purple-800', icon: Lightbulb },
     };
-    const icons = {
-        info: 'ℹ️',
-        warning: '⚠️',
-        success: '✅',
-        tip: '💡',
-    };
+    const { style, icon: Icon } = config[type];
+
     return (
-        <div className={`p-4 rounded-xl border ${styles[type]} my-4`}>
-            <span className="mr-2">{icons[type]}</span>
-            {children}
+        <div className={`p-5 rounded-2xl border ${style} my-6 flex gap-3 text-sm leading-relaxed`}>
+            <Icon className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div>{children}</div>
         </div>
     );
 };
 
-// ========== Overview Section ==========
+// ========== Section Components ==========
+
 const OverviewSection = () => (
     <div>
-        <SectionTitle icon="📘">概要・はじめに</SectionTitle>
+        <SectionTitle icon={<Book />}>概要・はじめに</SectionTitle>
 
         <SubSection title="FinanceManagerとは">
             <p>
@@ -143,490 +163,474 @@ const OverviewSection = () => (
                 総合的な家計管理アプリケーションです。
             </p>
             <p>
+                「資産の見える化」「将来の不安の解消」「日々の家計管理の効率化」をサポートします。
                 写真やスクリーンショットをアップロードするだけで、AI が自動的にデータを読み取り・分類し、
-                手入力の手間を大幅に削減します。
+                面倒な手入力の手間を大幅に削減します。
             </p>
         </SubSection>
 
         <SubSection title="主な機能">
-            <ul className="list-disc list-inside space-y-2 ml-2">
-                <li><strong>資産管理</strong> - 株式、投資信託、預金、不動産などを一括管理</li>
-                <li><strong>ローン管理</strong> - 住宅ローンや各種借入を管理し、完済時期を自動計算</li>
-                <li><strong>収支管理</strong> - 毎月の収入・支出を記録し、家計の健全性を把握</li>
-                <li><strong>ライフプラン</strong> - 老後までの資産推移をシミュレーション</li>
-                <li><strong>AIアドバイザー</strong> - 資産状況に基づいたアドバイスを提供</li>
-            </ul>
+            <div className="grid sm:grid-cols-2 gap-4 mt-4">
+                {[
+                    { title: '資産管理', desc: '株式、投資信託、不動産を一括管理', icon: Briefcase },
+                    { title: 'ローン管理', desc: '完済時期や利息を自動計算', icon: Home },
+                    { title: '収支管理', desc: '収入・支出を記録し家計を把握', icon: Wallet },
+                    { title: 'ライフプラン', desc: '老後までの資産推移を予測', icon: TrendingUp },
+                    { title: 'AIアドバイザー', desc: '資産状況に基づいた的確な助言', icon: Bot },
+                ].map((item, i) => (
+                    <div key={i} className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                        <div className="flex items-center gap-2 mb-2 font-bold text-gray-900">
+                            <item.icon size={18} className="text-blue-500" />
+                            {item.title}
+                        </div>
+                        <p className="text-sm text-gray-500">{item.desc}</p>
+                    </div>
+                ))}
+            </div>
         </SubSection>
 
-        <SubSection title="データの保存について">
+        <SubSection title="データの保存とセキュリティ">
             <InfoBox type="info">
-                すべてのデータはクラウド（Firebase）に安全に保存されます。
-                ログインすれば、どのデバイスからでもデータにアクセスできます。
+                すべてのデータはGoogleのクラウドプラットフォーム（Firebase）に安全に保存されます。
+                暗号化された通信を使用しており、第三者がデータを閲覧することはできません。
+                ログインすれば、PC、スマホ、タブレットなど、どのデバイスからでもデータにアクセス可能です。
             </InfoBox>
             <InfoBox type="warning">
-                ブラウザのキャッシュクリアやシークレットモードでは、ログインが必要です。
-                データ自体はクラウドに保存されているため消失しません。
+                ブラウザのシークレットモードを利用する場合、ブラウザを閉じるとログイン状態が解除されます。
+                再度ログインすればデータは復元されますのでご安心ください。
             </InfoBox>
         </SubSection>
 
         <SubSection title="推奨環境">
-            <ul className="list-disc list-inside space-y-1 ml-2">
+            <ul className="list-disc list-inside space-y-1 ml-2 text-gray-600">
                 <li>Google Chrome（最新版）</li>
                 <li>Safari（最新版）</li>
                 <li>Firefox（最新版）</li>
-                <li>画面サイズ: 1280px以上推奨（スマートフォンでも利用可能）</li>
+                <li>Edge（最新版）</li>
             </ul>
+            <p className="mt-2 text-sm text-gray-500">※スマートフォンのブラウザでもご利用いただけます。</p>
         </SubSection>
     </div>
 );
 
-// ========== Dashboard Section ==========
 const DashboardSection = () => (
     <div>
-        <SectionTitle icon="📊">ダッシュボード</SectionTitle>
+        <SectionTitle icon={<LayoutDashboard />}>ダッシュボード</SectionTitle>
 
         <SubSection title="ダッシュボードの役割">
             <p>
-                ダッシュボードは、あなたの財務状況を一目で把握できるホーム画面です。
-                総資産、純資産、月間収支などの重要な指標がカード形式で表示されます。
+                ダッシュボードは、あなたの財務状況の「今」を一目で把握できる司令塔です。
+                ログイン直後に表示され、資産総額や注目の指標をチェックできます。
             </p>
         </SubSection>
 
-        <SubSection title="表示される指標">
-            <ul className="list-disc list-inside space-y-2 ml-2">
-                <li><strong>総資産</strong> - すべての資産の合計金額</li>
-                <li><strong>純資産</strong> - 総資産からローン残高を差し引いた金額</li>
-                <li><strong>月間収入</strong> - 登録された月間収入の合計</li>
-                <li><strong>月間支出</strong> - 登録された月間支出の合計</li>
-                <li><strong>資産グラフ</strong> - ポートフォリオの内訳を視覚化</li>
+        <SubSection title="表示項目">
+            <ul className="space-y-4">
+                <li className="flex gap-4 items-start">
+                    <span className="font-bold text-gray-900 min-w-[5rem]">総資産</span>
+                    <span className="text-gray-600">登録された全ての資産（預金、株式、不動産など）の合計額です。</span>
+                </li>
+                <li className="flex gap-4 items-start">
+                    <span className="font-bold text-gray-900 min-w-[5rem]">純資産</span>
+                    <span className="text-gray-600">総資産から負債（ローン残高）を差し引いた金額です。これが「本当の自分の資産」と言えます。</span>
+                </li>
+                <li className="flex gap-4 items-start">
+                    <span className="font-bold text-gray-900 min-w-[5rem]">月間収支</span>
+                    <span className="text-gray-600">今月の収入と支出の状況を表示します。</span>
+                </li>
+                <li className="flex gap-4 items-start">
+                    <span className="font-bold text-gray-900 min-w-[5rem]">資産グラフ</span>
+                    <span className="text-gray-600">ポートフォリオの内訳（現金比率、投資比率など）を円グラフで視覚化します。</span>
+                </li>
             </ul>
         </SubSection>
 
         <InfoBox type="tip">
-            ダッシュボードのデータは、各管理ページ（資産管理、ローン管理、収支管理）で
-            登録したデータが自動的に反映されます。
+            ダッシュボードの数値がおかしいと感じたら、各管理ページ（資産、ローン、収支）のデータを確認してみてください。
+            ダッシュボードはそれらの集計結果を表示しています。
         </InfoBox>
     </div>
 );
 
-// ========== Portfolio Section ==========
 const PortfolioSection = () => (
     <div>
-        <SectionTitle icon="💼">資産管理</SectionTitle>
+        <SectionTitle icon={<Briefcase />}>資産管理</SectionTitle>
 
-        <SubSection title="資産管理ページでできること">
-            <ul className="list-disc list-inside space-y-2 ml-2">
-                <li>株式、投資信託、預金、不動産などの資産を登録・管理</li>
-                <li>証券会社のスクリーンショットをAIで自動読み取り</li>
-                <li>口座種別（特定口座、NISA、iDeCoなど）の設定</li>
-                <li>リアルタイム株価の取得（対応銘柄のみ）</li>
-            </ul>
-        </SubSection>
-
-        <SubSection title="資産の登録方法">
-            <p><strong>方法1: 画像アップロード（AI読み取り）</strong></p>
-            <p className="ml-4 text-sm">
-                証券会社のポートフォリオ画面のスクリーンショットをアップロードすると、
-                AIが銘柄名、数量、金額を自動的に読み取ります。
-            </p>
-
-            <p className="mt-4"><strong>方法2: 手動入力</strong></p>
-            <p className="ml-4 text-sm">
-                資産の種類、名称、金額、口座種別を手動で入力します。
+        <SubSection title="機能概要">
+            <p>
+                あなたの保有する全ての資産を一元管理します。
+                銀行預金、証券口座の株式、投資信託、iDeCo、不動産、暗号資産など、あらゆる資産を登録可能です。
             </p>
         </SubSection>
 
-        <SubSection title="口座種別について">
-            <div className="overflow-x-auto">
-                <table className="min-w-full text-sm border rounded-lg overflow-hidden">
-                    <thead className="bg-gray-100">
+        <SubSection title="便利な登録機能">
+            <div className="space-y-6">
+                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                    <h4 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
+                        <Bot size={18} className="text-purple-600" />
+                        AI自動読み取り（推奨）
+                    </h4>
+                    <p className="text-sm text-gray-600">
+                        証券会社のポートフォリオ画面のスクリーンショットをアップロードするだけで、
+                        銘柄名、数量、評価額などをAIが自動で読み取ります。手入力の手間が省け、入力ミスも防げます。
+                    </p>
+                </div>
+
+                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                    <h4 className="font-bold text-gray-900 mb-2">手動入力</h4>
+                    <p className="text-sm text-gray-600">
+                        AI読み取りに対応していない資産や、現金などは手動で詳細に入力できます。
+                    </p>
+                </div>
+            </div>
+        </SubSection>
+
+        <SubSection title="口座種別の重要性">
+            <p className="mb-4">
+                資産登録時に「口座種別」を正しく設定することで、ライフプランシミュレーションの精度が向上します。
+            </p>
+            <div className="overflow-hidden rounded-xl border border-gray-200">
+                <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 text-gray-700">
                         <tr>
-                            <th className="px-4 py-2 text-left font-bold">口座種別</th>
-                            <th className="px-4 py-2 text-left font-bold">税金区分</th>
-                            <th className="px-4 py-2 text-left font-bold">説明</th>
+                            <th className="px-4 py-3 text-left font-bold">口座種別</th>
+                            <th className="px-4 py-3 text-left font-bold">税金</th>
+                            <th className="px-4 py-3 text-left font-bold">特徴</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y">
+                    <tbody className="divide-y divide-gray-100 bg-white">
                         <tr>
-                            <td className="px-4 py-2 font-medium">特定口座</td>
-                            <td className="px-4 py-2"><span className="text-red-600 font-bold">課税</span></td>
-                            <td className="px-4 py-2">一般的な証券口座。売却益・配当に約20%課税</td>
+                            <td className="px-4 py-3 font-medium">特定口座 / 一般</td>
+                            <td className="px-4 py-3 text-red-600 font-bold">約20%</td>
+                            <td className="px-4 py-3 text-gray-600">利益に対して課税されます。</td>
                         </tr>
-                        <tr>
-                            <td className="px-4 py-2 font-medium">一般口座</td>
-                            <td className="px-4 py-2"><span className="text-red-600 font-bold">課税</span></td>
-                            <td className="px-4 py-2">確定申告が必要な口座。売却益・配当に課税</td>
+                        <tr className="bg-indigo-50/50">
+                            <td className="px-4 py-3 font-medium text-indigo-900">新NISA / 旧NISA</td>
+                            <td className="px-4 py-3 text-emerald-600 font-bold">0%</td>
+                            <td className="px-4 py-3 text-gray-600">運用益が非課税。優先的に利用すべき口座です。</td>
                         </tr>
-                        <tr className="bg-indigo-50">
-                            <td className="px-4 py-2 font-medium">新NISA（つみたて）</td>
-                            <td className="px-4 py-2"><span className="text-indigo-600 font-bold">非課税</span></td>
-                            <td className="px-4 py-2">年間120万円まで。長期積立向け投資信託専用</td>
-                        </tr>
-                        <tr className="bg-indigo-50">
-                            <td className="px-4 py-2 font-medium">新NISA（成長枠）</td>
-                            <td className="px-4 py-2"><span className="text-indigo-600 font-bold">非課税</span></td>
-                            <td className="px-4 py-2">年間240万円まで。株式・投資信託に投資可能</td>
-                        </tr>
-                        <tr className="bg-indigo-50">
-                            <td className="px-4 py-2 font-medium">旧NISA</td>
-                            <td className="px-4 py-2"><span className="text-indigo-600 font-bold">非課税</span></td>
-                            <td className="px-4 py-2">2023年以前に購入した旧制度のNISA</td>
-                        </tr>
-                        <tr className="bg-indigo-50">
-                            <td className="px-4 py-2 font-medium">iDeCo</td>
-                            <td className="px-4 py-2"><span className="text-indigo-600 font-bold">非課税</span></td>
-                            <td className="px-4 py-2">個人型確定拠出年金。60歳まで引き出し不可</td>
+                        <tr className="bg-indigo-50/50">
+                            <td className="px-4 py-3 font-medium text-indigo-900">iDeCo</td>
+                            <td className="px-4 py-3 text-emerald-600 font-bold">0%</td>
+                            <td className="px-4 py-3 text-gray-600">老後資金専用。60歳まで引き出せませんが節税効果が高いです。</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
         </SubSection>
-
-        <InfoBox type="info">
-            <strong>課税 vs 非課税の違い:</strong><br />
-            課税口座では売却益や配当に約20%の税金がかかります。
-            非課税口座（NISA・iDeCo）では税金がかからないため、長期的な資産形成に有利です。
-        </InfoBox>
     </div>
 );
 
-// ========== Loans Section ==========
 const LoansSection = () => (
     <div>
-        <SectionTitle icon="🏠">ローン管理</SectionTitle>
+        <SectionTitle icon={<Home />}>ローン管理</SectionTitle>
 
-        <SubSection title="ローン管理ページでできること">
-            <ul className="list-disc list-inside space-y-2 ml-2">
-                <li>住宅ローン、自動車ローン、事業ローンなどを登録・管理</li>
-                <li>完済予定日の自動計算</li>
-                <li>借入人（名義）ごとの管理</li>
-                <li>ライフプランシミュレーションへの自動連携</li>
-            </ul>
-        </SubSection>
-
-        <SubSection title="ローンの登録項目">
-            <ul className="list-disc list-inside space-y-2 ml-2">
-                <li><strong>借入人（名義）</strong> - 誰のローンか（自分、配偶者など）</li>
-                <li><strong>ローン名称</strong> - ローンを識別するための名前</li>
-                <li><strong>借入残高</strong> - 現在の残高（円）</li>
-                <li><strong>毎月の返済額</strong> - 月々の返済金額（円）</li>
-                <li><strong>金利</strong> - 年利（%）</li>
-                <li><strong>登録日（基準日）</strong> - 残高の基準となる日付</li>
-            </ul>
-        </SubSection>
-
-        <SubSection title="完済予定日の計算">
+        <SubSection title="負債を正しく把握する">
             <p>
-                入力された残高、月々の返済額、金利から、完済予定日を自動計算します。
-                金利が設定されている場合は、利息を考慮した正確な計算が行われます。
+                住宅ローン、自動車ローン、教育ローン、奨学金などを登録します。
+                負債を直視することは不安かもしれませんが、健全な家計管理の第一歩です。
+            </p>
+        </SubSection>
+
+        <SubSection title="登録できる項目">
+            <ul className="list-disc list-inside space-y-2 ml-2 text-gray-600">
+                <li><strong>借入人</strong> - 家族の誰の借入か</li>
+                <li><strong>借入残高</strong> - 返済すべき残りの金額</li>
+                <li><strong>金利（年利）</strong> - 支払う利息の割合。重要です。</li>
+                <li><strong>毎月の返済額</strong> - ボーナス払いなども考慮して平均化するか、別途管理します。</li>
+            </ul>
+        </SubSection>
+
+        <SubSection title="自動計算機能">
+            <p>
+                残高、金利、返済額を入力すると、<strong>「あと何年で完済できるか」</strong>を自動計算します。
+                繰上げ返済の計画を立てるのに役立ちます。
             </p>
             <InfoBox type="warning">
-                金利が高すぎて返済額が利息分を下回る場合、「返済不能」と表示されます。
-                この場合は返済額の増額を検討してください。
+                金利が高く、毎月の返済額が少ないと、利息ばかり支払って元本が減らない状態（返済不能判定）になることがあります。
+                この警告が出た場合は、返済計画の見直しをお勧めします。
             </InfoBox>
         </SubSection>
     </div>
 );
 
-// ========== CashFlow Section ==========
 const CashFlowSection = () => (
     <div>
-        <SectionTitle icon="💰">収支管理</SectionTitle>
+        <SectionTitle icon={<Wallet />}>収支管理</SectionTitle>
 
-        <SubSection title="収支管理ページでできること">
-            <ul className="list-disc list-inside space-y-2 ml-2">
-                <li>月間・年間の収入・支出を登録</li>
-                <li>給与明細や領収書のAI読み取り</li>
-                <li>カテゴリ別の支出分析</li>
-                <li>投資・貯蓄の自動識別</li>
-            </ul>
-        </SubSection>
-
-        <SubSection title="収入の登録">
-            <p>以下のような収入を登録できます：</p>
-            <ul className="list-disc list-inside space-y-1 ml-2 mt-2">
-                <li>給与・賞与</li>
-                <li>事業収入</li>
-                <li>配当・利子</li>
-                <li>年金</li>
-                <li>その他の収入</li>
-            </ul>
-        </SubSection>
-
-        <SubSection title="支出の登録">
-            <p>以下のようなカテゴリで支出を管理できます：</p>
-            <ul className="list-disc list-inside space-y-1 ml-2 mt-2">
-                <li>住居費（家賃、住宅ローン返済）</li>
-                <li>食費</li>
-                <li>光熱費</li>
-                <li>通信費</li>
-                <li>交通費</li>
-                <li>医療費</li>
-                <li>教育費</li>
-                <li>保険料</li>
-                <li>投資・貯蓄</li>
-                <li>その他</li>
-            </ul>
-        </SubSection>
-
-        <InfoBox type="tip">
-            「投資・貯蓄」カテゴリの支出は、ライフプランの「収支データから同期」機能で
-            毎月の積立額として自動反映できます。
-        </InfoBox>
-    </div>
-);
-
-// ========== LifePlan Section ==========
-const LifePlanSection = () => (
-    <div>
-        <SectionTitle icon="📈">ライフプラン</SectionTitle>
-
-        <SubSection title="ライフプランシミュレーションとは">
+        <SubSection title="お金の流れを記録する">
             <p>
-                現在の年齢から設定した年齢（例: 85歳）までの資産推移をシミュレーションします。
-                収入、支出、ローン、教育費、退職金などを考慮した長期的な資産計画を立てられます。
+                毎月の収入と支出を記録・管理します。
+                家計簿のように細かくつけることも、ざっくりとカテゴリごとに管理することも可能です。
             </p>
         </SubSection>
 
-        <SubSection title="設定項目の説明">
-            <p><strong>■ 資産設定</strong></p>
-            <ul className="list-disc list-inside space-y-1 ml-4 mt-2 text-sm">
-                <li><strong>現在の年齢</strong> - シミュレーション開始時点の年齢</li>
-                <li><strong>シミュレーション終了年齢</strong> - 何歳までシミュレーションするか</li>
-                <li><strong>初期NISA残高</strong> - 現在の非課税口座の合計金額</li>
-                <li><strong>初期課税残高</strong> - 現在の課税口座の合計金額</li>
-                <li><strong>毎月のNISA積立額</strong> - 月々の非課税口座への積立額</li>
-                <li><strong>毎月の課税口座積立額</strong> - 月々の課税口座への積立額</li>
-                <li><strong>想定利回り</strong> - 年間の期待リターン（%）</li>
-            </ul>
-
-            <p className="mt-4"><strong>■ 退職・老後設定</strong></p>
-            <ul className="list-disc list-inside space-y-1 ml-4 mt-2 text-sm">
-                <li><strong>退職年齢</strong> - 働くことをやめる年齢</li>
-                <li><strong>退職金</strong> - 退職時に受け取る一時金</li>
-                <li><strong>月間生活費</strong> - 退職後の月々の生活費</li>
-                <li><strong>年金月額</strong> - 受け取る年金の月額</li>
-            </ul>
-        </SubSection>
-
-        <SubSection title="グラフの見方">
-            <div className="space-y-3 text-sm">
-                <div className="flex items-center gap-3 p-2 bg-indigo-50 rounded-lg">
-                    <div className="w-4 h-4 bg-indigo-500 rounded"></div>
-                    <span><strong>非課税残高</strong> - NISA・iDeCoなど、売却益に税金がかからない資産</span>
+        <SubSection title="収入の登録">
+            <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-gray-50 rounded-lg">
+                    <span className="block font-bold mb-1">定期収入</span>
+                    <span className="text-sm text-gray-600">給与、年金など毎月決まって入るお金</span>
                 </div>
-                <div className="flex items-center gap-3 p-2 bg-blue-50 rounded-lg">
-                    <div className="w-4 h-4 bg-blue-500 rounded"></div>
-                    <span><strong>課税残高</strong> - 特定口座など、売却益に税金がかかる資産</span>
-                </div>
-                <div className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                    <div className="w-4 h-4 bg-gray-700 rounded"></div>
-                    <span><strong>合計資産</strong> - 非課税 + 課税の総額</span>
+                <div className="p-4 bg-gray-50 rounded-lg">
+                    <span className="block font-bold mb-1">一時所得</span>
+                    <span className="text-sm text-gray-600">賞与（ボーナス）、配当金、副業収入など</span>
                 </div>
             </div>
         </SubSection>
 
-        <SubSection title="年齢別詳細モーダル">
+        <SubSection title="支出カテゴリ">
+            <p className="mb-4">以下のようなカテゴリで管理できます。</p>
+            <div className="flex flex-wrap gap-2">
+                {['住居費', '食費', '水道光熱費', '通信費', '保険料', '教育費', '医療費', '娯楽費', '交通費', '一般財形', '投資信託積立'].map(tag => (
+                    <span key={tag} className="px-3 py-1 bg-white border border-gray-200 rounded-full text-sm text-gray-600">
+                        {tag}
+                    </span>
+                ))}
+            </div>
+        </SubSection>
+
+        <InfoBox type="tip">
+            「投資・貯蓄」カテゴリの支出（例：つみたてNISAの毎月購入額）は、
+            ライフプランページの「収支データから同期」機能を使うことで、自動的に将来シミュレーションの積立額として反映できます。
+        </InfoBox>
+    </div>
+);
+
+const LifePlanSection = () => (
+    <div>
+        <SectionTitle icon={<TrendingUp />}>ライフプラン</SectionTitle>
+
+        <SubSection title="未来をシミュレーション">
             <p>
-                グラフ上の任意の年齢をクリックすると、その年の収支内訳と資産内訳を確認できます。
+                現在の資産、これからの収入・支出、そして運用のリターン（利回り）を仮定して、
+                <strong>「将来、資産がどう推移するか」</strong>をグラフで可視化します。
+                「老後2000万円問題」など、将来のお金の不安を具体的な数値で確認できます。
             </p>
-            <ul className="list-disc list-inside space-y-1 ml-2 mt-2 text-sm">
-                <li><strong>年間収入</strong> - 給与・事業収入（働いている期間）、年金（退職後）</li>
-                <li><strong>年間支出</strong> - 生活費、教育費、ローン返済など</li>
-                <li><strong>年間収支（キャッシュフロー）</strong> - 収入 − 支出。黒字/赤字で表示</li>
-                <li><strong>非課税残高の内訳</strong> - 初期残高からの成長分 / 積立累積からの成長分</li>
-                <li><strong>課税残高の内訳</strong> - 初期残高からの成長分 / 積立・退職金からの成長分</li>
+        </SubSection>
+
+        <SubSection title="シミュレーション設定">
+            <div className="space-y-4">
+                <div className="border-l-4 border-blue-500 pl-4">
+                    <h4 className="font-bold text-gray-900">資産設定</h4>
+                    <p className="text-sm text-gray-600">現在のNISA残高、課税口座残高、それぞれの毎月の積立額を設定します。</p>
+                </div>
+                <div className="border-l-4 border-green-500 pl-4">
+                    <h4 className="font-bold text-gray-900">リターン設定（利回り）</h4>
+                    <p className="text-sm text-gray-600">
+                        年率何%で運用できるかを設定します。
+                        <br />(目安: 全世界株式 4~7%, 債券バランス 2~4% 程度)
+                    </p>
+                </div>
+                <div className="border-l-4 border-orange-500 pl-4">
+                    <h4 className="font-bold text-gray-900">退職・老後設定</h4>
+                    <p className="text-sm text-gray-600">何歳まで働くか、退職金はいくらか、年金は月額いくら貰えるかを設定します。</p>
+                </div>
+            </div>
+        </SubSection>
+
+        <SubSection title="グラフの見方">
+            <ul className="space-y-2 mt-2 bg-gray-50 p-4 rounded-xl">
+                <li className="flex items-center gap-3">
+                    <div className="w-4 h-4 bg-indigo-500 rounded"></div>
+                    <span className="text-sm"><strong>非課税資産 (NISA/iDeCo)</strong>: 税金がかからず効率よく増える資産</span>
+                </li>
+                <li className="flex items-center gap-3">
+                    <div className="w-4 h-4 bg-blue-400 rounded"></div>
+                    <span className="text-sm"><strong>課税資産</strong>: 利益に税金がかかる資産</span>
+                </li>
+                <li className="flex items-center gap-3">
+                    <div className="w-4 h-4 bg-gray-800 rounded"></div>
+                    <span className="text-sm"><strong>資産合計</strong>: すべての合計。これが右肩上がりなら安心です。</span>
+                </li>
             </ul>
         </SubSection>
 
         <InfoBox type="info">
-            <strong>運用益の計算について:</strong><br />
-            非課税口座は設定した利回りがそのまま適用されます。
-            課税口座は税金（約20%）を考慮し、利回りの80%が適用されます。
-        </InfoBox>
-
-        <InfoBox type="warning">
-            シミュレーションはあくまで参考値です。実際の運用成果は市場状況により変動します。
+            グラフの特定の年齢をクリックすると、その年齢時点での詳細な収支内訳や資産内訳が表示されます。
         </InfoBox>
     </div>
 );
 
-// ========== AI Section ==========
 const AISection = () => (
     <div>
-        <SectionTitle icon="🤖">AIアドバイザー</SectionTitle>
+        <SectionTitle icon={<Bot />}>AIアドバイザー</SectionTitle>
 
-        <SubSection title="AIアドバイザーとは">
+        <SubSection title="あなた専用のファイナンシャルプランナー">
             <p>
-                あなたの資産状況、ローン、収支データをもとに、
-                AIが個別化されたファイナンシャルアドバイスを提供します。
+                登録されたデータを元に、AIがあなたの家計状況を分析し、アドバイスを提供します。
+                一般的な回答だけでなく、あなたの「資産額」や「家族構成」を踏まえた回答が可能です。
             </p>
         </SubSection>
 
-        <SubSection title="使い方">
-            <ol className="list-decimal list-inside space-y-2 ml-2">
-                <li>AIアドバイザーページを開く</li>
-                <li>質問や相談内容をテキストで入力</li>
-                <li>「送信」ボタンをクリック</li>
-                <li>AIからの回答を確認</li>
-            </ol>
-        </SubSection>
-
-        <SubSection title="質問の例">
-            <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>「私の資産配分は適切ですか？」</li>
-                <li>「老後資金は足りそうですか？」</li>
-                <li>「ローンの繰上げ返済をすべきですか？」</li>
-                <li>「NISAの活用方法を教えてください」</li>
-                <li>「子供の教育費の準備はどうすればいいですか？」</li>
-            </ul>
+        <SubSection title="活用例">
+            <div className="grid gap-3">
+                {[
+                    "「今のペースで老後資金は足りますか？」",
+                    "「住宅ローンの繰上げ返済とNISA増額、どっちがお得？」",
+                    "「ポートフォリオのリスクが高すぎませんか？」",
+                    "「子供の教育費、いつまでにいくら必要？」"
+                ].map((q, i) => (
+                    <div key={i} className="flex gap-3 items-center p-3 bg-white border border-gray-200 rounded-lg text-gray-700 hover:border-blue-300 transition-colors">
+                        <HelpCircle size={16} className="text-blue-500" />
+                        {q}
+                    </div>
+                ))}
+            </div>
         </SubSection>
 
         <InfoBox type="warning">
-            AIの回答は一般的な情報提供であり、投資助言ではありません。
-            重要な財務判断は、必ず専門家（ファイナンシャルプランナー、税理士など）に相談してください。
+            AIのアドバイスは参考情報です。最終的な投資判断はご自身の責任で行ってください。
+            また、AIは未来を完全に予測できるわけではありません。
         </InfoBox>
     </div>
 );
 
-// ========== Glossary Section ==========
 const GlossarySection = () => (
     <div>
-        <SectionTitle icon="📖">用語集</SectionTitle>
-
-        <div className="space-y-4">
-            <GlossaryItem
-                term="課税口座"
-                reading="かぜいこうざ"
-                description="売却益や配当金に税金がかかる口座。特定口座、一般口座が該当。売却益の約20%が税金として差し引かれます。"
-            />
-            <GlossaryItem
-                term="非課税口座"
-                reading="ひかぜいこうざ"
-                description="売却益や配当金に税金がかからない口座。NISA（つみたて・成長枠）、iDeCoが該当。税金がかからない分、長期的な資産形成に有利です。"
-            />
-            <GlossaryItem
-                term="NISA（ニーサ）"
-                reading="にーさ"
-                description="少額投資非課税制度。年間投資枠内で購入した株式・投資信託の売却益・配当が非課税になります。2024年から新NISAがスタートし、つみたて投資枠（年120万円）と成長投資枠（年240万円）の合計360万円まで投資可能。"
-            />
-            <GlossaryItem
-                term="iDeCo（イデコ）"
-                reading="いでこ"
-                description="個人型確定拠出年金。毎月の掛金が全額所得控除され、運用益も非課税。ただし、原則60歳まで引き出せません。"
-            />
-            <GlossaryItem
-                term="特定口座"
-                reading="とくていこうざ"
-                description="証券会社が年間取引報告書を作成してくれる口座。「源泉徴収あり」を選ぶと、確定申告が不要になります。"
-            />
-            <GlossaryItem
-                term="純資産"
-                reading="じゅんしさん"
-                description="総資産（持っているものすべての価値）から負債（ローンなど借りているお金）を差し引いた金額。実質的な自分の資産。"
-            />
-            <GlossaryItem
-                term="キャッシュフロー"
-                reading="きゃっしゅふろー"
-                description="ある期間における収入から支出を差し引いた金額。プラスなら黒字（お金が増えている）、マイナスなら赤字（お金が減っている）。"
-            />
-            <GlossaryItem
-                term="利回り"
-                reading="りまわり"
-                description="投資額に対する収益の割合。例えば、100万円投資して1年後に5万円の利益が出たら、利回りは5%です。"
-            />
-            <GlossaryItem
-                term="複利"
-                reading="ふくり"
-                description="元本だけでなく、それまでの利息に対しても利息がつく計算方法。長期投資では複利効果により資産が大きく成長します。"
-            />
-            <GlossaryItem
-                term="繰上げ返済"
-                reading="くりあげへんさい"
-                description="ローンの通常の返済に加えて、追加で元本を返済すること。総支払利息を減らし、完済を早められます。"
-            />
-            <GlossaryItem
-                term="ポートフォリオ"
-                reading="ぽーとふぉりお"
-                description="保有する資産の組み合わせ・内訳のこと。株式、債券、預金などをどのような割合で持っているかを表します。"
-            />
-            <GlossaryItem
-                term="アセットアロケーション"
-                reading="あせっとあろけーしょん"
-                description="資産配分のこと。リスクとリターンのバランスを考慮して、どの資産クラスにどれだけ投資するかを決めること。"
-            />
+        <SectionTitle icon={<BookOpen />}>用語集</SectionTitle>
+        <div className="grid gap-4">
+            <GlossaryItem term="アセットアロケーション" reading="あせっとあろけーしょん" description="資産配分のこと。リスクとリターンを決定づける最も重要な要素と言われます。" />
+            <GlossaryItem term="NISA（ニーサ）" reading="にーさ" description="少額投資非課税制度。投資の利益にかかる約20%の税金がゼロになるお得な制度。" />
+            <GlossaryItem term="iDeCo（イデコ）" reading="いでこ" description="個人型確定拠出年金。掛け金が全額所得控除になり税金が安くなるが、60歳まで引き出せない。" />
+            <GlossaryItem term="キャピタルゲイン" reading="きゃぴたるげいん" description="資産の値上がり益のこと。安く買って高く売ることで得られる利益。" />
+            <GlossaryItem term="インカムゲイン" reading="いんかむげいん" description="資産を持っているだけで得られる利益。配当金、分配金、家賃収入など。" />
+            <GlossaryItem term="流動性" reading="りゅうどうせい" description="現金への換えやすさ。預金は流動性が高く、不動産は流動性が低い。" />
+            <GlossaryItem term="ポートフォリオ" reading="ぽーとふぉりお" description="保有資産の内訳・組み合わせ。" />
+            <GlossaryItem term="リバランス" reading="りばらんす" description="崩れた資産配分を元の比率に戻すこと。高くなった資産を売り、安くなった資産を買う作業。" />
+            <GlossaryItem term="ドルコスト平均法" reading="どるこすとへいきんほう" description="定期的に一定金額ずつ購入し続ける投資手法。安い時には多く、高い時には少なく買うことで平均取得単価を下げられる。" />
         </div>
     </div>
 );
 
 const GlossaryItem = ({ term, reading, description }) => (
-    <div className="border-b border-gray-100 pb-4">
-        <div className="flex items-baseline gap-2 mb-1">
-            <span className="font-bold text-gray-900">{term}</span>
+    <div className="p-4 rounded-xl border border-gray-100 hover:border-blue-200 transition-colors bg-white">
+        <div className="flex items-baseline gap-2 mb-2">
+            <span className="font-bold text-lg text-gray-900">{term}</span>
             <span className="text-xs text-gray-400">（{reading}）</span>
         </div>
-        <p className="text-sm text-gray-600">{description}</p>
+        <p className="text-sm text-gray-600 leading-relaxed">{description}</p>
     </div>
 );
 
-// ========== FAQ Section ==========
 const FAQSection = () => (
     <div>
-        <SectionTitle icon="❓">よくある質問</SectionTitle>
-
-        <div className="space-y-6">
+        <SectionTitle icon={<HelpCircle />}>よくある質問</SectionTitle>
+        <div className="space-y-4">
             <FAQItem
-                question="データは安全に保存されていますか？"
-                answer="はい、すべてのデータはGoogle Firebaseのクラウドに暗号化されて保存されています。Googleアカウントでログインしている限り、データは安全に保護されます。"
+                q="データは安全ですか？"
+                a="はい。世界最高水準のセキュリティを持つGoogle Cloud Platform上で厳重に管理されています。"
             />
             <FAQItem
-                question="別のデバイスからアクセスできますか？"
-                answer="はい、同じGoogleアカウントでログインすれば、パソコン、スマートフォン、タブレットなど、どのデバイスからでも同じデータにアクセスできます。"
+                q="無料で使えますか？"
+                a="はい、現在の機能はすべて無料でご利用いただけます。"
             />
             <FAQItem
-                question="AI読み取り機能が正確に読み取れません"
-                answer="画像の解像度が低い、文字がぼやけている、特殊なフォーマットの場合は読み取り精度が下がることがあります。可能であれば、より高解像度のスクリーンショットを使用するか、手動で修正してください。"
+                q="スマートフォンで使えますか？"
+                a="はい。PC、スマホ、タブレット、どの端末からでもブラウザでアクセス可能です。"
             />
             <FAQItem
-                question="ライフプランのシミュレーションは信頼できますか？"
-                answer="シミュレーションは入力された条件に基づく概算です。実際の運用成果は市場状況により変動します。あくまで計画の参考としてご利用ください。"
+                q="NISAとiDeCoはどう登録すればいい？"
+                a="資産登録画面で「口座種別」を選択できます。そこでNISAやiDeCoを指定してください。"
             />
             <FAQItem
-                question="課税口座と非課税口座、どちらを優先すべきですか？"
-                answer="一般的には、非課税口座（NISA）の年間投資枠を使い切ることを優先し、余裕があれば課税口座で追加投資することが推奨されます。ただし、個人の状況によりますので、詳しくは専門家にご相談ください。"
-            />
-            <FAQItem
-                question="データを削除したい場合は？"
-                answer="各管理ページで個別のデータを削除できます。アカウント全体のデータ削除をご希望の場合は、設定ページからお問い合わせください。"
-            />
-            <FAQItem
-                question="アプリの利用料金はかかりますか？"
-                answer="基本機能は無料でご利用いただけます。将来的にプレミアム機能を追加する可能性がありますが、現在の機能は引き続き無料で提供予定です。"
+                q="退会したい（データを全消去したい）"
+                a="ユーザー設定ページから退会処理を行うことで、サーバー上の全データが削除されます。復元はできません。"
             />
         </div>
     </div>
 );
 
-const FAQItem = ({ question, answer }) => {
+const FAQItem = ({ q, a }) => {
     const [isOpen, setIsOpen] = useState(false);
     return (
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full p-4 text-left bg-gray-50 hover:bg-gray-100 transition-colors flex justify-between items-center"
+                className="w-full p-5 text-left hover:bg-gray-50 transition-colors flex justify-between items-center group"
             >
-                <span className="font-medium text-gray-900">{question}</span>
-                <span className={`text-xl transition-transform ${isOpen ? 'rotate-180' : ''}`}>
-                    ▼
-                </span>
+                <div className="flex gap-3 items-center font-bold text-gray-900">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs shrink-0">Q</span>
+                    {q}
+                </div>
+                {isOpen ? <ChevronDown size={20} className="text-gray-400" /> : <ChevronRight size={20} className="text-gray-400 group-hover:text-gray-600" />}
             </button>
             {isOpen && (
-                <div className="p-4 text-gray-600 text-sm leading-relaxed bg-white">
-                    {answer}
+                <div className="p-5 pt-0 text-gray-600 text-sm leading-relaxed bg-gray-50/50 border-t border-gray-100">
+                    <div className="mt-4 flex gap-3">
+                        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-600 text-xs shrink-0 font-bold">A</span>
+                        <div>{a}</div>
+                    </div>
                 </div>
             )}
         </div>
     );
 };
+
+// Data Configuration
+const HELP_SECTIONS = [
+    {
+        id: 'overview',
+        title: '概要・はじめに',
+        icon: <Book size={20} />,
+        component: OverviewSection,
+        keywords: 'finance manager, introduction, はじめ方, 使い方, 概要, アプリについて'
+    },
+    {
+        id: 'dashboard',
+        title: 'ダッシュボード',
+        icon: <LayoutDashboard size={20} />,
+        component: DashboardSection,
+        keywords: 'dashboard, home, ホーム, 資産推移, 純資産, サマリー'
+    },
+    {
+        id: 'portfolio',
+        title: '資産管理',
+        icon: <Briefcase size={20} />,
+        component: PortfolioSection,
+        keywords: 'portfolio, asset, stock, 株式, 投資信託, 不動産, 資産登録, AI読み取り, NISA, iDeCo'
+    },
+    {
+        id: 'loans',
+        title: 'ローン管理',
+        icon: <Home size={20} />,
+        component: LoansSection,
+        keywords: 'loan, debt, mortgage, 借金, 住宅ローン, 返済, 金利, 負債'
+    },
+    {
+        id: 'cashflow',
+        title: '収支管理',
+        icon: <Wallet size={20} />,
+        component: CashFlowSection,
+        keywords: 'cashflow, income, expense, 家計簿, 収入, 支出, 給与, ボーナス'
+    },
+    {
+        id: 'lifeplan',
+        title: 'ライフプラン',
+        icon: <TrendingUp size={20} />,
+        component: LifePlanSection,
+        keywords: 'lifeplan, simulation, future, retirement, 老後, シミュレーション, 将来設計, 年金'
+    },
+    {
+        id: 'ai',
+        title: 'AIアドバイザー',
+        icon: <Bot size={20} />,
+        component: AISection,
+        keywords: 'ai, advisor, artificial intelligence, 相談, アドバイス, チャット'
+    },
+    {
+        id: 'glossary',
+        title: '用語集',
+        icon: <BookOpen size={20} />,
+        component: GlossarySection,
+        keywords: 'glossary, terms, dictionary, 用語, 意味, 解説'
+    },
+    {
+        id: 'faq',
+        title: 'よくある質問',
+        icon: <HelpCircle size={20} />,
+        component: FAQSection,
+        keywords: 'faq, question, help, 質問, エラー, トラブルシューティング'
+    },
+];
 
 export default HelpPage;

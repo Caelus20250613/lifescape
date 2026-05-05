@@ -349,7 +349,36 @@ const AdvancedSimulationSettings = ({ isOpen, onClose }) => {
                                         {/* Tab 3: Economics */}
                                         <Tab.Panel className="rounded-xl bg-white p-3 ring-white ring-opacity-60 ring-offset-2 ring-offset-blue-400 focus:outline-none focus:ring-2">
                                             <div className="space-y-4">
-                                                <div>
+                                                <div className="bg-orange-50 p-4 rounded-lg border border-orange-100">
+                                                    <label className="block text-sm font-bold text-gray-800 mb-2">資産取り崩し順序</label>
+                                                    <p className="text-xs text-gray-600 mb-3">現預金が不足した際に、どの資産から優先して売却するかを設定します。</p>
+                                                    <div className="flex flex-col gap-2">
+                                                        <label className="flex items-center gap-2 cursor-pointer">
+                                                            <input
+                                                                type="radio"
+                                                                name="withdrawalPriority"
+                                                                value="TaxableFirst"
+                                                                checked={economics.withdrawalPriority !== 'NisaFirst'}
+                                                                onChange={() => setEconomics({ ...economics, withdrawalPriority: 'TaxableFirst' })}
+                                                                className="text-blue-600"
+                                                            />
+                                                            <span className="text-sm">特定口座(課税)を優先 <span className="text-xs text-gray-500">(推奨: NISAの非課税メリットを最大化)</span></span>
+                                                        </label>
+                                                        <label className="flex items-center gap-2 cursor-pointer">
+                                                            <input
+                                                                type="radio"
+                                                                name="withdrawalPriority"
+                                                                value="NisaFirst"
+                                                                checked={economics.withdrawalPriority === 'NisaFirst'}
+                                                                onChange={() => setEconomics({ ...economics, withdrawalPriority: 'NisaFirst' })}
+                                                                className="text-blue-600"
+                                                            />
+                                                            <span className="text-sm">NISA(非課税)を優先 <span className="text-xs text-gray-500">(目先の税金支払いを回避)</span></span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                                <div className="pt-4 border-t">
                                                     <label className="block text-sm font-medium text-gray-700">マレーシアリンギット (MYR) レート</label>
                                                     <div className="flex items-center gap-2">
                                                         <span>1 MYR = </span>
