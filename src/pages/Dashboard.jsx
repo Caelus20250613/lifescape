@@ -117,24 +117,24 @@ export default function Dashboard() {
     };
 
     return (
-        <div className="max-w-6xl mx-auto p-4 space-y-6">
+        <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
             <header className="mb-2">
-                <h1 className="text-2xl font-bold text-gray-800">ダッシュボード</h1>
-                <p className="text-gray-500 text-sm">資産状況のサマリー</p>
+                <h1 className="text-2xl font-black tracking-tight text-slate-950">ダッシュボード</h1>
+                <p className="text-sm font-medium text-slate-500">資産状況のサマリー</p>
             </header>
 
             {/* 1. 資産サマリーカード */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
+                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_8px_rgba(15,23,42,0.06)] flex justify-between items-center">
                     <div>
                         <p className="text-xs text-gray-500 font-medium mb-1 uppercase tracking-wider">総資産</p>
-                        <p className="text-2xl font-bold text-blue-600">{formatYen(totalAssets)}</p>
+                        <p className="text-2xl font-bold text-teal-700">{formatYen(totalAssets)}</p>
                     </div>
-                    <div className="p-3 bg-blue-50 rounded-full text-blue-500">
+                    <div className="p-3 bg-teal-50 rounded-full text-teal-600">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     </div>
                 </div>
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
+                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_8px_rgba(15,23,42,0.06)] flex justify-between items-center">
                     <div>
                         <p className="text-xs text-gray-500 font-medium mb-1 uppercase tracking-wider">総負債</p>
                         <p className="text-2xl font-bold text-red-500">{formatYen(-totalLiabilities)}</p>
@@ -143,7 +143,7 @@ export default function Dashboard() {
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                     </div>
                 </div>
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
+                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_8px_rgba(15,23,42,0.06)] flex justify-between items-center">
                     <div>
                         <p className="text-xs text-gray-500 font-medium mb-1 uppercase tracking-wider">純資産</p>
                         <p className={`text-2xl font-bold ${netWorth >= 0 ? 'text-gray-800' : 'text-red-500'}`}>
@@ -162,11 +162,11 @@ export default function Dashboard() {
                 {/* メインメニュー & NISAウィジェット */}
                 <div className="lg:col-span-2 space-y-6">
                     {/* NISA Progress Widget */}
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-[0_1px_8px_rgba(15,23,42,0.06)]">
                         <div className="flex justify-between items-end mb-4">
                             <div>
                                 <h2 className="text-lg font-bold text-gray-800 flex items-center">
-                                    <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded mr-2 uppercase tracking-tight">New NISA</span>
+                                    <span className="bg-teal-700 text-white text-[10px] px-1.5 py-0.5 rounded mr-2 uppercase tracking-tight">New NISA</span>
                                     新NISA 生涯投資枠
                                 </h2>
                                 <p className="text-xs text-gray-400 mt-0.5">
@@ -175,7 +175,7 @@ export default function Dashboard() {
                                 </p>
                             </div>
                             <div className="text-right">
-                                <span className="text-xl font-black text-blue-600 font-mono tracking-tight">{formatYen(nisaTotalCost)}</span>
+                                <span className="text-xl font-black text-teal-700 font-mono tracking-tight">{formatYen(nisaTotalCost)}</span>
                                 <span className="text-xs text-gray-400 ml-1">/ {formatShortYen(MAX_NISA_QUOTA)}</span>
                             </div>
                         </div>
@@ -183,7 +183,7 @@ export default function Dashboard() {
                         {/* Progress Bar */}
                         <div className="relative w-full h-4 bg-gray-100 rounded-full overflow-hidden mb-3">
                             <div
-                                className="absolute top-0 left-0 h-full bg-blue-600 transition-all duration-1000 ease-out flex items-center justify-end px-2"
+                                className="absolute top-0 left-0 h-full bg-teal-700 transition-all duration-1000 ease-out flex items-center justify-end px-2"
                                 style={{ width: `${Math.min(100, (nisaTotalCost / MAX_NISA_QUOTA) * 100)}%` }}
                             >
                                 {(nisaTotalCost / MAX_NISA_QUOTA) > 0.1 && (
@@ -196,7 +196,7 @@ export default function Dashboard() {
 
                         <div className="flex justify-between items-center text-xs">
                             <div className="text-gray-500 font-medium">
-                                進捗率: <span className="text-blue-600 font-bold">{((nisaTotalCost / MAX_NISA_QUOTA) * 100).toFixed(1)}%</span>
+                                進捗率: <span className="text-teal-700 font-bold">{((nisaTotalCost / MAX_NISA_QUOTA) * 100).toFixed(1)}%</span>
                             </div>
                             <div className="text-gray-500">
                                 残り枠: <span className="text-gray-800 font-bold">{formatYen(Math.max(0, MAX_NISA_QUOTA - nisaTotalCost))}</span>
@@ -204,21 +204,21 @@ export default function Dashboard() {
                         </div>
                     </div>
 
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-[0_1px_8px_rgba(15,23,42,0.06)]">
                         <h2 className="text-lg font-bold text-gray-800 mb-4">メインメニュー</h2>
                         <div className="grid grid-cols-2 gap-4">
 
-                            <Link to="/assets" className="group flex flex-col md:flex-row items-center p-6 bg-white border border-gray-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all duration-200">
-                                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 mb-3 md:mb-0 md:mr-4 group-hover:scale-110 transition-transform">
+                            <Link to="/assets" className="group flex flex-col md:flex-row items-center p-6 bg-white border border-gray-200 rounded-lg hover:border-teal-300 hover:shadow-md transition-all duration-200">
+                                <div className="w-12 h-12 bg-teal-50 rounded-full flex items-center justify-center text-teal-700 mb-3 md:mb-0 md:mr-4 group-hover:scale-110 transition-transform">
                                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                 </div>
                                 <div className="text-center md:text-left">
-                                    <h3 className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">資産管理</h3>
+                                    <h3 className="font-bold text-gray-800 group-hover:text-teal-700 transition-colors">資産管理</h3>
                                     <p className="text-sm text-gray-500 mt-1">資産の内訳を確認・編集</p>
                                 </div>
                             </Link>
 
-                            <Link to="/loans" className="group flex flex-col md:flex-row items-center p-6 bg-white border border-gray-200 rounded-xl hover:border-red-300 hover:shadow-md transition-all duration-200">
+                            <Link to="/loans" className="group flex flex-col md:flex-row items-center p-6 bg-white border border-gray-200 rounded-lg hover:border-red-300 hover:shadow-md transition-all duration-200">
                                 <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-3 md:mb-0 md:mr-4 group-hover:scale-110 transition-transform">
                                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                                 </div>
@@ -228,7 +228,7 @@ export default function Dashboard() {
                                 </div>
                             </Link>
 
-                            <Link to="/cashflow" className="group flex flex-col md:flex-row items-center p-6 bg-white border border-gray-200 rounded-xl hover:border-green-300 hover:shadow-md transition-all duration-200">
+                            <Link to="/cashflow" className="group flex flex-col md:flex-row items-center p-6 bg-white border border-gray-200 rounded-lg hover:border-green-300 hover:shadow-md transition-all duration-200">
                                 <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600 mb-3 md:mb-0 md:mr-4 group-hover:scale-110 transition-transform">
                                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 36v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
                                 </div>
@@ -238,7 +238,7 @@ export default function Dashboard() {
                                 </div>
                             </Link>
 
-                            <Link to="/investments" className="group flex flex-col md:flex-row items-center p-6 bg-white border border-gray-200 rounded-xl hover:border-yellow-300 hover:shadow-md transition-all duration-200">
+                            <Link to="/investments" className="group flex flex-col md:flex-row items-center p-6 bg-white border border-gray-200 rounded-lg hover:border-yellow-300 hover:shadow-md transition-all duration-200">
                                 <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-600 mb-3 md:mb-0 md:mr-4 group-hover:scale-110 transition-transform">
                                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
                                 </div>
@@ -253,10 +253,10 @@ export default function Dashboard() {
                 </div>
 
                 {/* 右側: ポートフォリオ */}
-                <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
+                <div className="lg:col-span-1 rounded-lg border border-slate-200 bg-white p-6 shadow-[0_1px_8px_rgba(15,23,42,0.06)] flex flex-col">
                     <div className="flex justify-between items-center mb-2">
                         <h2 className="text-lg font-bold text-gray-800">ポートフォリオ</h2>
-                        <Link to="/assets" className="text-xs text-blue-600 hover:underline">詳細 &rarr;</Link>
+                        <Link to="/assets" className="text-xs text-teal-700 hover:underline">詳細 &rarr;</Link>
                     </div>
 
                     <div className="flex-grow min-h-[300px]">
@@ -304,7 +304,7 @@ export default function Dashboard() {
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center text-gray-400">
                                 <p>データがありません</p>
-                                <Link to="/assets" className="mt-2 text-blue-500 text-sm hover:underline">資産を登録する</Link>
+                                <Link to="/assets" className="mt-2 text-teal-600 text-sm hover:underline">資産を登録する</Link>
                             </div>
                         )}
                     </div>

@@ -38,7 +38,7 @@ function AppContent() {
         pb-24 (padding-bottom: 6rem) : スマホで下部メニューに隠れないよう余白を確保
         md:pb-0 : PCサイズ(md以上)では下部メニューがないので余白をゼロにする
       */}
-      <div className="pb-24 md:pb-0 min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-[#f6f8fb] pb-24 md:pb-0">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
 
