@@ -1,6 +1,17 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthHelpers';
+
+const navItems = [
+    { to: '/', label: 'ダッシュボード' },
+    { to: '/assets', label: '資産' },
+    { to: '/properties', label: '不動産' },
+    { to: '/loans', label: 'ローン' },
+    { to: '/cashflow', label: '収支' },
+    { to: '/investments', label: '積立' },
+    { to: '/life-plan', label: '将来計画' },
+    { to: '/chat', label: 'AI相談' },
+];
 
 export default function Navbar() {
     const { currentUser, logout } = useAuth();
@@ -11,58 +22,52 @@ export default function Navbar() {
             await logout();
             navigate('/login');
         } catch {
-            console.error("Failed to log out");
+            console.error('Failed to log out');
         }
     }
 
     if (!currentUser) return null;
 
+    const navClass = ({ isActive }) =>
+        `inline-flex h-9 items-center rounded-md border px-3 text-sm font-semibold transition-colors whitespace-nowrap ${isActive
+            ? 'border-teal-300 bg-teal-50 text-teal-800'
+            : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+        }`;
+
     return (
-        <nav className="bg-white shadow">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between h-16">
-                    <div className="flex">
-                        <Link to="/" className="flex-shrink-0 flex items-center font-bold text-xl text-blue-600">
-                            LifeScape
-                        </Link>
-                        <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                            <Link to="/" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                                ダッシュボード
-                            </Link>
-                            <Link to="/assets" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                                資産管理
-                            </Link>
-                            <Link to="/properties" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                                不動産管理
-                            </Link>
-                            <Link to="/loans" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                                ローン管理
-                            </Link>
-                            <Link to="/cashflow" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                                収支管理
-                            </Link>
-                            <Link to="/investments" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                                積立管理
-                            </Link>
-                            <Link to="/life-plan" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                                ライフプラン
-                            </Link>
-                            <Link to="/chat" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                                AIアドバイザー
-                            </Link>
+        <nav className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-[0_1px_8px_rgba(15,23,42,0.05)] backdrop-blur">
+            <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 lg:px-8">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <Link to="/" className="flex min-w-0 items-center gap-3 no-underline">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-teal-200 bg-teal-50 text-sm font-black text-teal-800">
+                            LS
                         </div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                        <Link to="/help" className="text-gray-500 hover:text-gray-700 text-sm font-medium">
+                        <div className="min-w-0">
+                            <div className="truncate text-lg font-black tracking-tight text-slate-950">LifeScape</div>
+                            <div className="text-xs font-semibold text-slate-500">資産・収支・将来計画</div>
+                        </div>
+                    </Link>
+                    <div className="flex items-center gap-2">
+                        <span className="inline-flex h-8 items-center rounded-full border border-teal-200 bg-teal-50 px-3 text-xs font-bold text-teal-800">
+                            ● 資産管理
+                        </span>
+                        <Link to="/help" className="hidden h-8 items-center rounded-md px-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 sm:inline-flex">
                             ヘルプ
                         </Link>
-                        <Link to="/settings" className="text-gray-500 hover:text-gray-700 text-sm font-medium">
+                        <Link to="/settings" className="hidden h-8 items-center rounded-md px-2 text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-slate-900 sm:inline-flex">
                             設定
                         </Link>
-                        <button onClick={handleLogout} className="text-gray-500 hover:text-gray-700 text-sm font-medium">
+                        <button onClick={handleLogout} className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900">
                             ログアウト
                         </button>
                     </div>
+                </div>
+                <div className="hidden gap-1 overflow-x-auto pb-1 md:flex">
+                    {navItems.map((item) => (
+                        <NavLink key={item.to} to={item.to} end={item.to === '/'} className={navClass}>
+                            {item.label}
+                        </NavLink>
+                    ))}
                 </div>
             </div>
         </nav>
